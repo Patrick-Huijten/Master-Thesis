@@ -1,0 +1,13 @@
+Te doen:
+
+Voor Lunch:
+-Balance dataset qua classes
+-Bij classifier: laat percentages per class zijn
+-Maak apart model voor elke class (-1-rest/1-all change voor SVM)
+-Als max percentage onder threshold ligt, geef class 5
+-BERTje word embedding
+
+Voor later:
+-Gebruik PoS tags in classification
+-
+-
