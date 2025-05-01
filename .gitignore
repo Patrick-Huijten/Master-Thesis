@@ -1,0 +1,28 @@
+# Ignore virtual environment folder
+venv/
+
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+
+# Ignore package distribution files
+*.egg
+*.egg-info
+dist/
+build/
+
+# Ignore MacOS system files (if on Mac)
+.DS_Store
+
+# Ignore VS Code workspace settings (optional)
+.vscode/
+
+# Ignore Jupyter Notebook checkpoints (if using Jupyter)
+.ipynb_checkpoints/
+
+# Ignore pipenv and poetry virtual environments (if using them)
+Pipfile.lock
+poetry.lock
+
+# Ignore environment variables (if used in a .env file)
+.env
