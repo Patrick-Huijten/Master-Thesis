@@ -1,5 +1,5 @@
 # Ignore virtual environment folder
-Thesis_venv/
+venv_thesis/
 
 # Ignore Python bytecode files
 __pycache__/
