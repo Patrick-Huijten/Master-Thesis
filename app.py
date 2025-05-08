@@ -12,7 +12,7 @@ app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = "MannaertsAppels Dashboard"
 
 # Import the train_classifier function from the train_model.py file
-from train_models import train_classifier
+from train_models import train_classifier, preprocess_training_data
 
 # PDF text extraction function
 def extract_text_from_pdf(pdf_bytes):
@@ -134,8 +134,9 @@ def toggle_modal(retrain_clicks, confirm_clicks, cancel_clicks, is_open):
 def retrain_model(n_clicks):
     if not n_clicks:
         raise PreventUpdate
+    df_train = preprocess_training_data()# remove me once done with testing
     try:
-        status = train_classifier()
+        status = train_classifier(df_train)
         return html.Span(status, style={"color": "limegreen", "fontWeight": "bold"})
     except Exception as e:
         return html.Span(f"Training failed: {str(e)}", style={"color": "red", "fontWeight": "bold"})

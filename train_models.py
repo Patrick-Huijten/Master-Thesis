@@ -4,15 +4,16 @@ import pandas as pd
 import os
 import string
 import spacy
+import torch
+import logging
+import re
+import joblib
+import numpy as np
+from sklearn.svm import SVC
 from spacy.util import is_package
 from spacy.cli import download
-
-# Dummy classifier training function, remove once the final version is ready
-def train_classifier():
-    time.sleep(3)  # Simulate time-consuming training
-    return "Model trained successfully!"
-
-#________________________________________________________________________________
+from transformers import AutoTokenizer, AutoModel
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 
 def extract_text_from_pdf(pdf_path):
     document = fitz.open(pdf_path)
@@ -102,6 +103,56 @@ def preprocess_training_data():
     df['text'] = df['text'].apply(lambda text: remove_stopwords(text, nlp))
     df = lemmatization(df, nlp)
     df['pos_tags'] = df['text'].apply(lambda text: POS_tagging(text, nlp))
-    print(df)
-    
+    # print(df)
+
     return df
+
+def train_classifier(df):
+
+    #Thre is no need to display warnings, so we disable them
+    logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+    
+    #We select the 3 parameter values which yielded the best performance. For more information, view the classification jupyter notebook
+    model_name = "pdelobelle/robbert-v2-dutch-base" #We use RobBERT
+    C = 10
+    kernel = "rbf"
+
+    df["label"] = df["group"].astype("category").cat.codes 
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
+    model.eval()
+
+    def get_word_embedding(text):
+        with torch.no_grad():
+            tokens = tokenizer(text, padding="max_length", truncation=True, max_length=256, return_tensors="pt")
+            output = model(**tokens)
+            embeddings = output.last_hidden_state.mean(dim=1)
+        return embeddings.squeeze().numpy()
+
+    X_train = np.array([get_word_embedding(text) for text in df["text"]])
+    y_train = df["label"].values
+
+    classifier = SVC(kernel=kernel, C=C, probability=True)
+    classifier.fit(X_train, y_train)
+    
+    #Create a folder for the model if such a folder does not yet exist
+    model_dir = 'Classifier models'
+    os.makedirs(model_dir, exist_ok=True)
+    pattern = re.compile(r'^model_(\d+)$') # Regular expression to match file names with format model_X, where X is a positive int
+
+    # Get all existing model files and extract their numbers
+    existing_numbers = []
+    for filename in os.listdir(model_dir):
+        name, ext = os.path.splitext(filename)
+        match = pattern.match(name)
+        if match:
+            existing_numbers.append(int(match.group(1)))
+    
+    # Save the model such that its associated number is the highest in the model folder
+    next_number = max(existing_numbers, default=0) + 1
+    new_model_name = f"model_{next_number}.joblib"
+    save_path = os.path.join(model_dir, new_model_name)
+    full_path = os.path.abspath(save_path)
+    joblib.dump(model, save_path)
+    
+    return f"Classifier has been trained and saved to: {full_path}"
