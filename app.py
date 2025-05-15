@@ -2,10 +2,12 @@ import base64
 import io
 import fitz  # PyMuPDF
 import dash
+from datetime import datetime
 import joblib
 import pandas as pd
 import plotly.graph_objects as go
 import re
+import os
 import matplotlib.pyplot as plt
 from dash import html, dcc, Input, Output, State, Dash, ctx
 import dash_bootstrap_components as dbc
@@ -95,10 +97,35 @@ app.layout = dbc.Container([
                 ], width=3),
             ], className="mb-3"), 
 
-            # Future visualizations placeholder
-            # html.Div(id="future-content-placeholder", style={"height": "400px"}),
+            dbc.Row([
+                dbc.Col(
+                    id="sector_pred",
+                    width=8
+                ),
 
-            html.Div(id="sector_pred", style={"marginTop": "50px"}),
+                # Right: dropdown + button vertically stacked
+                dbc.Col([
+                    dcc.Dropdown(
+                        id="true-class-dropdown",
+                        options=[
+                            {"label": "Bouw & Vastgoed", "value": "Bouw & Vastgoed"},
+                            {"label": "Handel & Industrie", "value": "Handel & Industrie"},
+                            {"label": "Zakelijke Dienstverlening", "value": "Zakelijke Dienstverlening"},
+                            {"label": "Zorg", "value": "Zorg"}
+                        ],
+                        placeholder="Select true class",
+                        style={"marginBottom": "10px"}
+                    ),
+                    dbc.Button(
+                        "Add to training dataset",
+                        id="save-pdf-sector",
+                        color="success",
+                        className="w-100",
+                        size="sm"
+                    )
+                ], width=4)
+            ], className="mb-4", align="start"),
+
             dcc.Graph(figure={}, id="classification_plot", style={"height": "400px"}),
         ], width=7)
     ], className="mb-4"),
@@ -305,6 +332,53 @@ def perform_classification(model_contents, pdf_contents):
         html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})])
 
     return prediction_display, fig
+
+@app.callback(
+    Output("retrain-status", "children", allow_duplicate=True),
+    Input("save-pdf-sector", "n_clicks"),
+    State("true-class-dropdown", "value"),
+    State("upload-data", "contents"),
+    prevent_initial_call=True
+)
+def save_pdf_to_class_folder(n_clicks, selected_class, pdf_contents):
+    if not pdf_contents or not selected_class:
+        raise PreventUpdate
+
+    try:
+        base_dir = "Classifier data"
+        class_dir = os.path.join(base_dir, selected_class)
+        os.makedirs(class_dir, exist_ok=True)
+
+        # Find highest existing ID (X)
+        existing_files = os.listdir(class_dir)
+        id_pattern = re.compile(r'^(\d+),\s*\d{2}-\d{2}-\d{4}\.pdf$')
+
+        existing_ids = []
+        for fname in existing_files:
+            match = id_pattern.match(fname)
+            if match:
+                existing_ids.append(int(match.group(1)))
+
+        next_id = max(existing_ids) + 1 if existing_ids else 1
+
+        # Use current date as proxy for publication date
+        today_str = datetime.now().strftime("%d-%m-%Y")
+
+        # Construct filename
+        new_filename = f"{next_id}, {today_str}.pdf"
+        file_path = os.path.join(class_dir, new_filename)
+
+        # Decode and save
+        _, content_string = pdf_contents.split(',')
+        pdf_data = base64.b64decode(content_string)
+
+        with open(file_path, "wb") as f:
+            f.write(pdf_data)
+
+        return dbc.Alert(f"Saved file as '{new_filename}' in folder '{selected_class}'.", color="success", dismissable=True)
+
+    except Exception as e:
+        return dbc.Alert(f"Error saving PDF: {e}", color="danger", dismissable=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
