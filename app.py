@@ -91,7 +91,7 @@ app.layout = dbc.Container([
                     )
                 ], width=3),
                 dbc.Col([ 
-                    dbc.Button("Load SpanCat Model", color="info", className="w-100", size="sm") 
+                    dbc.Button("Load SpanCat Model", id="load-spancat-button", color="info", className="w-100", size="sm") 
                 ], width=3),
                 dbc.Col([ 
                     dbc.Button("Re-train Models", id="retrain-button", color="danger", className="w-100", size="sm") 
@@ -141,23 +141,32 @@ app.layout = dbc.Container([
         ]) 
     ], id="retrain-modal", is_open=False),
 
-#     # Modal for selecting Classifier
-#     dbc.Modal([
-#     dbc.ModalHeader("Select Classifier Model"),
-#     dbc.ModalBody([
-#         dcc.Upload(
-#             id='upload-model',
-#             children=dbc.Button("Select Model File", color="primary", className="w-100", size="sm"),
-#             multiple=False,
-#             accept=".joblib"
-#         ),
-#         html.Div(id="model-file-name", style={"marginTop": "10px", "color": "#00ff00"}),
-#     ]),
-#     dbc.ModalFooter([
-#         dbc.Button("Cancel", id="cancel-model-select", color="secondary", className="me-2"),
-#         dbc.Button("Confirm", id="confirm-model-select", color="primary"),
-#     ]),
-# ], id="model-select-modal", is_open=False),
+    # Modal for selecting SpanCat model
+    dbc.Modal([
+    # dbc.ModalHeader("Select Classifier Model"),
+    dbc.ModalBody([
+        html.Div(
+            "Please select your desired specialization. " \
+            "The latest SpanCat model for your selection will be loaded",
+            style={"marginBottom": "15px"}
+        ),
+        dbc.RadioItems(
+            id="SpanCat-specialization-radio",
+            options=[
+                {"label": "Vastgoed", "value": "Vastgoed"},
+                {"label": "Ondernemingen", "value": "Ondernemingen"},
+                {"label": "Arbeid", "value": "Arbeid"},
+                {"label": "Aansprakelijkheid & Letselschade", "value": "Aansprakelijkheid & Letselschade"}
+            ],
+            value=None,
+            inline=False
+        ),
+    ]),
+    dbc.ModalFooter([
+        dbc.Button("Cancel", id="cancel-model-select", color="secondary", className="me-2"),
+        dbc.Button("Confirm", id="confirm-model-select", color="primary"),
+    ]),
+], id="Spancat-select-modal", is_open=False),
 
     # Loading spinner and retrain status
     dbc.Row([ 
@@ -189,7 +198,24 @@ app.layout = dbc.Container([
 #         return text
 #     return ""
 
-# Callback: Toggle modal open/close
+
+# Callback: Toggle SpanCat modal open/close
+@app.callback(
+    Output("Spancat-select-modal", "is_open"),
+    [Input("load-spancat-button", "n_clicks"),
+     Input("confirm-model-select", "n_clicks"),
+     Input("cancel-model-select", "n_clicks")],
+)
+def toggle_SpanCat_modal(upload_clicks, confirm_clicks, cancel_clicks):
+    triggered = ctx.triggered_id
+    if triggered == "load-spancat-button":
+        return True
+    elif triggered in ["confirm-model-select", "cancel-model-select"]:
+        return False
+    return dash.no_update
+
+
+# Callback: Toggle retrain modal open/close
 @app.callback(
     Output("retrain-modal", "is_open"),
     [Input("retrain-button", "n_clicks"),
@@ -244,11 +270,11 @@ def update_font_size(font_size):
     Output("classification_plot", "figure"),
     Input("upload-model", "contents"),
     Input("upload-data", "contents"),
+    # Input(),
     prevent_initial_call=True
 )
-def handle_uploads(model_contents, pdf_contents):
-    # If neither is uploaded, don't update anything
-    if model_contents is None and pdf_contents is None:
+def handle_uploads(classifier_contents, pdf_contents): # add SpanCat_contents
+    if classifier_contents is None and pdf_contents is None:
         raise PreventUpdate
     
     fig = go.Figure()
@@ -261,7 +287,7 @@ def handle_uploads(model_contents, pdf_contents):
         text = extract_text_from_pdf(decoded)
 
     # If only the model is uploaded, don't update anything
-    if model_contents and pdf_contents:
+    if classifier_contents and pdf_contents:
 
         # Helper function to decode base64 contents
         def decode_contents(contents):
@@ -270,7 +296,7 @@ def handle_uploads(model_contents, pdf_contents):
             return io.BytesIO(decoded)
 
         # Decode and load the model
-        model_file = decode_contents(model_contents)
+        model_file = decode_contents(classifier_contents)
 
         try:
             classifier = joblib.load(model_file)
