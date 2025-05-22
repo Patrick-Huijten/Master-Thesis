@@ -166,7 +166,7 @@ def train_classifier(df):
     full_path = os.path.abspath(save_path)
     joblib.dump(classifier, save_path)
     
-    return f"Classifier has been trained and saved to: {full_path}"
+    return f"Classifier has been trained and saved to: {full_path}\n"
 
 def summing_probabilities(df):
     # For each article, sum the probabilities for each class across all paragraphs
@@ -301,7 +301,7 @@ def classify(df, classifier):
     final_classification_dict = combined_method(df, X, Y)
 
     # Since combined_method was originally written for multiple articles, we need to convert the dictionary to a string of the first and only value
-    class_mapping = {-1: "UNKNOWN — unable to determine a reliable class.", 0: 'Bouw & Vastgoed', 1: 'Handel & Industrie', 2: 'Zakelijke Dienstverlening', 3: 'Zorg'}
+    class_mapping = {-1: "UNKNOWN — unable to determine a reliable class", 0: 'Bouw & Vastgoed', 1: 'Handel & Industrie', 2: 'Zakelijke Dienstverlening', 3: 'Zorg'}
     final_classification_pred = class_mapping[next(iter(final_classification_dict.values()))]
 
     return final_classification_pred, df[['pred_probabilities']]

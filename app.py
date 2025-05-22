@@ -21,6 +21,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
+from SpanCat_code import SpanCat_data_prep, train_SpanCat
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -171,6 +172,9 @@ app.layout = dbc.Container([
     ])
 ], fluid=True)
 
+#____________________________________________________________________________________________________
+# Callbacks
+
 # Callback: PDF extraction
 @app.callback(
     Output('pdf-text-output', 'value'),
@@ -211,8 +215,16 @@ def retrain_model(n_clicks):
     if not n_clicks:
         raise PreventUpdate
     try:
+        # Pre-process training data and train the classifier
         df_train = preprocess_training_data()
         status = train_classifier(df_train)
+
+        # Prepare data for SpanCat and train the model
+        SpanCat_data_prep()
+        status += train_SpanCat()
+
+        print(f"Status={status}")
+
         return html.Span(status, style={"color": "limegreen", "fontWeight": "bold"})
     except Exception as e:
         return html.Span(f"Training failed: {str(e)}", style={"color": "red", "fontWeight": "bold"})
@@ -224,7 +236,6 @@ def retrain_model(n_clicks):
 )
 def update_font_size(font_size):
     return {'width': '100%', 'height': 550, 'fontSize': f'{font_size}px'}
-#________________________________________________________________________________
 
 #Load the classification model, perform classification and plot the results
 @app.callback(
@@ -237,13 +248,6 @@ def update_font_size(font_size):
 def perform_classification(model_contents, pdf_contents):
     if model_contents is None or pdf_contents is None:
         raise PreventUpdate
-
-    # # Decode and save the uploaded model file temporarily
-    # model_content_type, model_content_string = model_contents.split(',')
-    # model_bytes = base64.b64decode(model_content_string)
-    # temp_model_path = "temp_uploaded_model.joblib"
-    # with open(temp_model_path, "wb") as f:
-    #     f.write(model_bytes)
 
     # Helper function to decode base64 contents
     def decode_contents(contents):
