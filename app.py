@@ -291,7 +291,7 @@ def perform_classification(model_contents, pdf_contents):
         'Zorg': '#D55E00'                                             # Orange
 }
     
-        # Convert list of probabilities into separate columns
+    # Convert list of probabilities into separate columns
     proba_values = df_class_probas['pred_probabilities'].tolist()
 
     # Ensure all probability vectors are of length 4
