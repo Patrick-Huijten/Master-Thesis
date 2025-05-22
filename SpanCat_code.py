@@ -139,7 +139,10 @@ def train_SpanCat():
                 print(f"Completed epoch {current_epoch+1}/{epochs[label]}")
         
         # Save model after training is complete
-        output_dir = f"SpanCat models\\{label}\\{label}_model_{re.search(r'_training_spans_(\d+)\.spacy', most_recent_file).group(1)}"
+        match = re.search(r"_training_spans_(\d+)\.spacy", most_recent_file)
+        index = match.group(1)  # Extracted number
+        output_dir = f"SpanCat models\\{label}\\{label}_model_{index}"
+        # output_dir = f"SpanCat models\\{label}\\{label}_model_{re.search(r'_training_spans_(\d+)\.spacy', most_recent_file).group(1)}"
         os.makedirs(output_dir, exist_ok=True)
         nlp.to_disk(output_dir)
         print(f"Model for label '{label}' saved to {output_dir}")
