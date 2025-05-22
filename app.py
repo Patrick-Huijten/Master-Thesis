@@ -249,10 +249,8 @@ def update_font_size(font_size):
 def handle_uploads(model_contents, pdf_contents):
     # If neither is uploaded, don't update anything
     if model_contents is None and pdf_contents is None:
-        print("preventing update")
         raise PreventUpdate
     
-    print('1')
     fig = go.Figure()
     text = ""
     prediction_display = None
@@ -262,7 +260,6 @@ def handle_uploads(model_contents, pdf_contents):
         decoded = base64.b64decode(content_string)
         text = extract_text_from_pdf(decoded)
 
-    print(text)
     # If only the model is uploaded, don't update anything
     if model_contents and pdf_contents:
 
