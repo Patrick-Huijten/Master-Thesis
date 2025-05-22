@@ -184,21 +184,6 @@ app.layout = dbc.Container([
 #____________________________________________________________________________________________________
 # Callbacks
 
-# Callback: PDF extraction
-# @app.callback(
-#     Output('pdf-text-output', 'value'),
-#     Input('upload-data', 'contents'),
-#     prevent_initial_call=True
-# )
-# def update_output(contents):
-    # if contents:
-    #     content_type, content_string = contents.split(',')
-    #     decoded = base64.b64decode(content_string)
-    #     text = extract_text_from_pdf(decoded)
-#         return text
-#     return ""
-
-
 # Callback: Toggle SpanCat modal open/close
 @app.callback(
     Output("Spancat-select-modal", "is_open"),
@@ -213,7 +198,6 @@ def toggle_SpanCat_modal(upload_clicks, confirm_clicks, cancel_clicks):
     elif triggered in ["confirm-model-select", "cancel-model-select"]:
         return False
     return dash.no_update
-
 
 # Callback: Toggle retrain modal open/close
 @app.callback(
@@ -270,10 +254,11 @@ def update_font_size(font_size):
     Output("classification_plot", "figure"),
     Input("upload-model", "contents"),
     Input("upload-data", "contents"),
-    # Input(),
+    Input("confirm-model-select", "n_clicks"),
+    State("SpanCat-specialization-radio", "value"),
     prevent_initial_call=True
 )
-def handle_uploads(classifier_contents, pdf_contents): # add SpanCat_contents
+def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_specialization): # add SpanCat_contents
     if classifier_contents is None and pdf_contents is None:
         raise PreventUpdate
     
