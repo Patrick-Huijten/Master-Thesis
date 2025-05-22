@@ -21,7 +21,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
-from SpanCat_code import SpanCat_data_prep, train_SpanCat
+from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -158,7 +158,7 @@ app.layout = dbc.Container([
                 {"label": "Arbeid", "value": "Arbeid"},
                 {"label": "Aansprakelijkheid & Letselschade", "value": "Aansprakelijkheid & Letselschade"}
             ],
-            value=None,
+            value="Vastgoed",
             inline=False
         ),
     ]),
@@ -271,7 +271,7 @@ def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_s
         decoded = base64.b64decode(content_string)
         text = extract_text_from_pdf(decoded)
 
-    # If only the model is uploaded, don't update anything
+    # If a pdf has been uploaded and a classifier has been selected, predict the class of the pdf and visualize the results
     if classifier_contents and pdf_contents:
 
         # Helper function to decode base64 contents
@@ -358,6 +358,10 @@ def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_s
         prediction_display = html.Div([
             html.Span("Prediction: ", style={"fontWeight": "bold", "fontSize": "18px"}),
             html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})])
+    
+    # If a pdf has been uploaded and a SpanCat model has been selected, perform span detection and show the results
+    if pdf_contents and confirm_SpanCat:
+        spans = predict_spans(SpanCat_specialization, text)
 
     return text, prediction_display, fig
 

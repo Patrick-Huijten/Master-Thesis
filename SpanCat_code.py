@@ -148,3 +148,52 @@ def train_SpanCat():
         print(f"Model for label '{label}' saved to {output_dir}")
     
     return "Placeholder for training result"
+
+def predict_spans(specialization, text):
+    """
+    Predicts spans in the given text using the trained SpanCat model for the specified specialization.
+    
+    Args:
+    - specialization (str): The specialization for which to load the model.
+    - text (str): The text to analyze.
+    
+    Returns:
+    - list: A list of predicted spans with their labels.
+    """
+    
+    directory = f"SpanCat models\\{specialization}"
+
+    # Check if the model directory exists
+    if not os.path.exists(directory):
+        raise ValueError(f"Model for specialization '{specialization}' not found in {directory}.")
+    
+    # Set max_index to the highest number in the model directory
+    max_index = max((int(m.group(1)) for name in os.listdir(directory) if (m := re.search(r'_model_(\d+)$', name))), default=-1)
+
+    if max_index == -1:
+        raise ValueError(f"No model found for specialization '{specialization}' in {directory}.")
+
+    # Load the appropriate model based on the specialization
+    model_path = f"SpanCat models\\{specialization}\\{specialization}_model_{max_index}"
+    nlp = spacy.load(model_path)
+    doc = nlp(text)
+
+    # for span in doc.spans.get("sc", []):
+    #     if hasattr(span, "score") and span.score >= 0.1:
+    #         print(f"Span: {span.text}, Label: {span.label_}, Score: {span.score:.2f}")
+    
+
+
+
+
+    
+    # # Process the text
+    # doc = nlp(text)
+    
+    # # Extract and return spans
+    # spans = []
+    # for span in doc.spans["sc"]:
+    #     spans.append((span.text, span.label_))
+    
+    spans = []
+    return spans
