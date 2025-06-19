@@ -240,7 +240,7 @@ def highlight_spans(text, spans):
     current = 0
 
     for span in sorted(spans, key=lambda x: x['start']):
-        span_text = text[span['start']:span['end']]
+        # span_text = text[span['start']:span['end']]
         # print(f"Adding span: [{span['start']}:{span['end']}] → '{span_text}'")
         # print(f"Original span['text']: '{span['text']}'\n")
 
