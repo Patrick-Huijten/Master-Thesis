@@ -159,7 +159,7 @@ def predict_spans(specialization, text, threshold=0.1):
     Args:
     - specialization (str): The specialization for which to load the model.
     - text (str): The text to analyze.
-    threshold (float): The minimum score to consider a span as valid.
+    - threshold (float): The minimum score to consider a span as valid.
     
     Returns:
     - list: A dictionary containing the following 3 lists relating to the input text: 'spans', 'labels', and 'scores'
@@ -225,13 +225,24 @@ def predict_spans(specialization, text, threshold=0.1):
     return results
 
 def highlight_spans(text, spans):
+    """
+    Highlights spans in the given text using Dash HTML components.
+
+    Args:
+    - text (str): The text to highlight spans in.
+    - spans (list): A list of dictionaries containing span information with keys 'start', 'end', 'label', and 'score'.
+
+    Returns:
+    - list: A list of Dash HTML components with highlighted spans.
+    """
+
     components = []
     current = 0
 
     for span in sorted(spans, key=lambda x: x['start']):
         span_text = text[span['start']:span['end']]
-        print(f"Adding span: [{span['start']}:{span['end']}] → '{span_text}'")
-        print(f"Original span['text']: '{span['text']}'\n")
+        # print(f"Adding span: [{span['start']}:{span['end']}] → '{span_text}'")
+        # print(f"Original span['text']: '{span['text']}'\n")
 
         # Add text before the span
         if current < span['start']:
