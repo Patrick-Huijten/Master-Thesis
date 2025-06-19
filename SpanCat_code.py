@@ -14,14 +14,14 @@ from transformers import AutoTokenizer, AutoModel, TFAutoModel
 from spacy.util import minibatch
 from spacy.vocab import Vocab
 
-def convert_doccano_to_spacy(doccano_file, spacy_output_file, model="nl_core_news_lg"):
+def convert_doccano_to_spacy(doccano_file, spacy_output_file, model="nl_core_news_md"):
     """
     Converts a Doccano-labeled JSONL file into a spaCy-compatible .spacy file for Spancat training.
     
     Args:
     - doccano_file (str): Path to the input JSONL file from Doccano.
     - spacy_output_file (str): Path to save the output .spacy file.
-    - model (str): The spaCy model to use for tokenization (default: "nl_core_news_lg").
+    - model (str): The spaCy model to use for tokenization (default: "nl_core_news_md").
     """
 
     # Load the specified model with NER disabled (to prevent conflicts with Spancat)
@@ -53,7 +53,7 @@ def convert_doccano_to_spacy(doccano_file, spacy_output_file, model="nl_core_new
 
 def SpanCat_data_prep():
     """
-    Prepares the data for SpanCat training by extracting labeled texts from JSONL files and transforming them into Spacy files using nl_core_news_lg.
+    Prepares the data for SpanCat training by extracting labeled texts from JSONL files and transforming them into Spacy files using nl_core_news_md.
     """
 
     directory = 'SpanCat data'
@@ -79,7 +79,7 @@ def SpanCat_data_prep():
         print("label", label, "with index", index)
         convert_doccano_to_spacy(f"SpanCat data\\{label}\\{label}_training_spans_{index}.jsonl", 
                                  f"SpanCat data\\{label}\\{label}_training_spans_{index}.spacy", 
-                                 model="nl_core_news_lg")  # Large model
+                                 model="nl_core_news_md")  # Medium-sized model
         print("spacy file created for", label, "with index", index)
 
 def train_SpanCat():
@@ -93,6 +93,7 @@ def train_SpanCat():
     thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
     ngram_size = (2, 21)
     epochs = {"Vastgoed": 65, "Ondernemingen": 55, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 70}
+    # epochs = {"Vastgoed": 15, "Ondernemingen": 15, "Arbeid": 15, "Aansprakelijkheid & Letselschade": 15} # replace with actual epochs once testing is done
 
     for label in labels:
         #Find the most recent data for the currently selected label
@@ -104,7 +105,7 @@ def train_SpanCat():
         print("Most recent file for label", label, "is", most_recent_file)
 
         # Load the training data
-        lang_model = spacy.load("nl_core_news_lg")  # Load the large Dutch language model
+        lang_model = spacy.load("nl_core_news_md")  # Load the large Dutch language model
         doc_bin = DocBin().from_disk(f"{directory}\\{label}\\{most_recent_file}")
         docs = list(doc_bin.get_docs(lang_model.vocab))
         train_data = [Example(d, d) for d in docs]
@@ -113,7 +114,7 @@ def train_SpanCat():
         print(train_data)
 
         # Create an empty SpanCat model and incrementally train it
-        nlp = spacy.load("nl_core_news_lg")
+        nlp = spacy.load("nl_core_news_md")
         spancat = nlp.add_pipe("spancat", config={
             "spans_key": "sc",
             "suggester": {
@@ -126,6 +127,7 @@ def train_SpanCat():
         optimizer = nlp.initialize()
 
         for current_epoch in range(epochs[label]):
+            print(f"starting epoch {current_epoch+1}/{epochs[label]} for label {label}")
             local_random = random.Random(883821973 + current_epoch)
             local_random.shuffle(train_data)
             
@@ -149,18 +151,19 @@ def train_SpanCat():
     
     return "Placeholder for training result"
 
-def predict_spans(specialization, text):
+def predict_spans(specialization, text, threshold=0.1):
     """
     Predicts spans in the given text using the trained SpanCat model for the specified specialization.
     
     Args:
     - specialization (str): The specialization for which to load the model.
     - text (str): The text to analyze.
+    threshold (float): The minimum score to consider a span as valid.
     
     Returns:
-    - list: A list of predicted spans with their labels.
+    - list: A dictionary containing the following 3 lists relating to the input text: 'spans', 'labels', and 'scores'
     """
-    
+
     directory = f"SpanCat models\\{specialization}"
 
     # Check if the model directory exists
@@ -176,14 +179,40 @@ def predict_spans(specialization, text):
     # Load the appropriate model based on the specialization
     model_path = f"SpanCat models\\{specialization}\\{specialization}_model_{max_index}"
     nlp = spacy.load(model_path)
-    doc = nlp(text)
+
+    # Prepare and tokenize the document
+    doc = nlp.make_doc(text)
+    spancat = nlp.get_pipe("spancat")
+
+    # Predict spans once
+    predictions = spancat.predict([doc])
+    pred_spans = predictions[0].data.tolist()  # span indices
+    pred_scores = predictions[1].data.tolist()  # confidence scores
+
+    # Filter and return spans based on the specified threshold
+    results = []
+    for (start, end), scores in zip(pred_spans, pred_scores):
+        for label, score in zip(spancat.labels, scores):
+            if score >= threshold:
+                span = doc[start:end]
+                results.append({
+                    "text": span.text,
+                    "start": start,
+                    "end": end,
+                    "label": label,
+                    "score": score
+                })
+
+    print(results, len(results))
+    # print('')
+    # print(results['scores'][:10],results['labels'][:10],results['spans'][:10])
+
+    return results
 
     # for span in doc.spans.get("sc", []):
     #     if hasattr(span, "score") and span.score >= 0.1:
     #         print(f"Span: {span.text}, Label: {span.label_}, Score: {span.score:.2f}")
     
-
-
 
 
     
@@ -195,5 +224,54 @@ def predict_spans(specialization, text):
     # for span in doc.spans["sc"]:
     #     spans.append((span.text, span.label_))
     
-    spans = []
-    return spans
+    # spans = []
+    # return spans
+
+# def predict_spans(specialization, text):
+#     """
+#     Predicts spans in the given text using the trained SpanCat model for the specified specialization.
+    
+#     Args:
+#     - specialization (str): The specialization for which to load the model.
+#     - text (str): The text to analyze.
+    
+#     Returns:
+#     - list: A list of predicted spans with their labels.
+#     """
+    
+#     directory = f"SpanCat models\\{specialization}"
+
+#     # Check if the model directory exists
+#     if not os.path.exists(directory):
+#         raise ValueError(f"Model for specialization '{specialization}' not found in {directory}.")
+    
+#     # Set max_index to the highest number in the model directory
+#     max_index = max((int(m.group(1)) for name in os.listdir(directory) if (m := re.search(r'_model_(\d+)$', name))), default=-1)
+
+#     if max_index == -1:
+#         raise ValueError(f"No model found for specialization '{specialization}' in {directory}.")
+
+#     # Load the appropriate model based on the specialization
+#     model_path = f"SpanCat models\\{specialization}\\{specialization}_model_{max_index}"
+#     nlp = spacy.load(model_path)
+#     doc = nlp(text)
+
+#     # for span in doc.spans.get("sc", []):
+#     #     if hasattr(span, "score") and span.score >= 0.1:
+#     #         print(f"Span: {span.text}, Label: {span.label_}, Score: {span.score:.2f}")
+    
+
+
+
+
+    
+#     # # Process the text
+#     # doc = nlp(text)
+    
+#     # # Extract and return spans
+#     # spans = []
+#     # for span in doc.spans["sc"]:
+#     #     spans.append((span.text, span.label_))
+    
+#     spans = []
+#     return spans

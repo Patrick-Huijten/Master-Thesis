@@ -220,7 +220,7 @@ def toggle_retrain_modal(retrain_clicks, confirm_clicks, cancel_clicks, is_open)
     Output("retrain-status", "children"),
     Input("confirm-retrain", "n_clicks"),
     prevent_initial_call=True
-)
+)   
 def retrain_model(n_clicks):
     if not n_clicks:
         raise PreventUpdate
