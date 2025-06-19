@@ -5,6 +5,7 @@ import re
 import json
 import spacy
 import random
+from dash import html
 from spacy.tokens import DocBin, Span, Doc
 from spacy import displacy
 import spacy_transformers
@@ -191,23 +192,66 @@ def predict_spans(specialization, text, threshold=0.1):
 
     # Filter and return spans based on the specified threshold
     results = []
-    for (start, end), scores in zip(pred_spans, pred_scores):
+    for (start_token, end_token), scores in zip(pred_spans, pred_scores):
+        span = doc[start_token:end_token]  # this gives a Span object (token-based)
+
         for label, score in zip(spancat.labels, scores):
             if score >= threshold:
-                span = doc[start:end]
                 results.append({
                     "text": span.text,
-                    "start": start,
-                    "end": end,
+                    "start": span.start_char,
+                    "end": span.end_char,
                     "label": label,
                     "score": score
                 })
+
+    # results = []
+    # for (start, end), scores in zip(pred_spans, pred_scores):
+    #     for label, score in zip(spancat.labels, scores):
+    #         if score >= threshold:
+    #             span = doc[start:end]
+    #             results.append({
+    #                 "text": span.text,
+    #                 "start": start,
+    #                 "end": end,
+    #                 "label": label,
+    #                 "score": score
+    #             })
 
     print(results, len(results))
     # print('')
     # print(results['scores'][:10],results['labels'][:10],results['spans'][:10])
 
     return results
+
+def highlight_spans(text, spans):
+    components = []
+    current = 0
+
+    for span in sorted(spans, key=lambda x: x['start']):
+        span_text = text[span['start']:span['end']]
+        print(f"Adding span: [{span['start']}:{span['end']}] → '{span_text}'")
+        print(f"Original span['text']: '{span['text']}'\n")
+
+        # Add text before the span
+        if current < span['start']:
+            components.append(html.Span(text[current:span['start']]))
+
+        # Highlighted span
+        components.append(
+            html.Span(
+                text[span['start']:span['end']],
+                style={'backgroundColor': "#127bf3", 'padding': '2px', 'borderRadius': '4px', 'cursor': 'pointer'},
+                title=f"Label: {span['label']}, Score: {span['score']:.2f}"
+            )
+        )
+        current = span['end']
+
+    # Add remaining text
+    if current < len(text):
+        components.append(html.Span(text[current:]))
+
+    return components
 
     # for span in doc.spans.get("sc", []):
     #     if hasattr(span, "score") and span.score >= 0.1:

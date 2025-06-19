@@ -21,7 +21,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
-from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans
+from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, highlight_spans
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -52,10 +52,15 @@ app.layout = dbc.Container([
         dbc.Col([ 
             dbc.Card([ 
                 dbc.CardBody([ 
-                    dcc.Textarea( 
-                        id='pdf-text-output',
-                        style={'width': '100%', 'height': 550, 'fontSize': '12px'}, 
-                        readOnly=True
+                    # dcc.Textarea( 
+                    #     id='pdf-text-output',
+                    #     style={'width': '100%', 'height': 550, 'fontSize': '12px'}, 
+                    #     readOnly=True
+                    # ),
+                    html.Div(
+                        "Upload a PDF file using the button on the right. The contents will appear here.",
+                        id='highlighted-text-display',
+                        style={'height': '550px', 'overflowY': 'scroll', 'whiteSpace': 'pre-wrap', 'fontSize': '20px'}
                     ),
                     html.Div([ 
                         "Font Size", 
@@ -64,7 +69,7 @@ app.layout = dbc.Container([
                             min=8, 
                             max=36, 
                             step=1, 
-                            value=12,  # Default value
+                            value=20,  # Default value
                             marks={i: f"{i}" for i in range(8, 37, 4)},  # Mark every 4 units
                         ) 
                     ], style={"marginTop": "20px"})
@@ -241,15 +246,23 @@ def retrain_model(n_clicks):
 
 # Callback: Update font size of the text area
 @app.callback(
-    Output("pdf-text-output", "style"),
+    # Output("pdf-text-output", "style"),
+    Output("highlighted-text-display", "style"),
     Input("font-size-slider", "value")
 )
 def update_font_size(font_size):
-    return {'width': '100%', 'height': 550, 'fontSize': f'{font_size}px'}
+        return {
+        'width': '100%',
+        'height': '550px',
+        'overflowY': 'scroll',
+        'whiteSpace': 'pre-wrap',
+        'fontSize': f'{font_size}px'
+    }
 
 #Load the classification model, perform classification and plot the results
 @app.callback(
-    Output('pdf-text-output', 'value'),
+    # Output('pdf-text-output', 'value'),
+    Output('highlighted-text-display', 'children'),
     Output("sector_pred", "children"),
     Output("classification_plot", "figure"),
     Input("upload-model", "contents"),
@@ -265,6 +278,7 @@ def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_s
     fig = go.Figure()
     text = ""
     prediction_display = None
+    highlighted = None
 
     if pdf_contents:
         content_type, content_string = pdf_contents.split(',')
@@ -362,8 +376,13 @@ def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_s
     # If a pdf has been uploaded and a SpanCat model has been selected, perform span detection and show the results
     if pdf_contents and confirm_SpanCat:
         spans = predict_spans(SpanCat_specialization, text)
+        highlighted = highlight_spans(text, spans)
 
-    return text, prediction_display, fig
+    # If text is available but no spans were detected, use the original text without annotations
+    if text and not highlighted:
+        highlighted = text
+
+    return highlighted, prediction_display, fig
 
 @app.callback(
     Output("retrain-status", "children", allow_duplicate=True),
