@@ -21,7 +21,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
-from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, highlight_spans, editable_highlight_spans
+from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, editable_highlight_spans
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -33,8 +33,15 @@ app.layout = dbc.Container([
 
     # Save the spans found by SpanCat for reference
     dcc.Store(id="current-spans", data=[]),
+
+    # Store for the current text content
     dcc.Store(id="current-text", data=""),
+
+    # Store for the selected text range for manually adding spans
     dcc.Store(id="selected-text-store", data={"start": None, "end": None}),
+
+    # Store for the threshold value
+    dcc.Store(id="threshold-store", data=0.1),
 
     # Title
     dbc.Row([ 
@@ -71,12 +78,24 @@ app.layout = dbc.Container([
                         "Font Size", 
                         dcc.Slider( 
                             id="font-size-slider",
-                            min=8, 
-                            max=36, 
+                            min=10, 
+                            max=40, 
                             step=1, 
                             value=20,  # Default value
-                            marks={i: f"{i}" for i in range(8, 37, 4)},  # Mark every 4 units
+                            marks={i: str(i) for i in range(10, 41, 5)},  # Mark every 5 units
                         ),
+
+                        "SpanCat Threshold",
+                        dcc.Slider(
+                            id="threshold-slider",
+                            min=0.0,
+                            max=1.0,
+                            step=0.001,
+                            value=0.1,  # Default threshold
+                            marks={i: f"{str(round(i, 2))}" for i in [i * 0.01 for i in range(0, 101, 10)]},
+                            tooltip={"always_visible": False, "placement": "bottom"},
+                        ),
+
                         dbc.Button("Add Selected Span", id="add-span-btn", color="success", className="mt-2")
                     ], style={"marginTop": "20px"})
                 ]) 
@@ -297,6 +316,150 @@ def update_font_size(font_size):
         'fontSize': f'{font_size}px'
     }
 
+# @app.callback(
+#     Output("highlighted-text-display", "children"),
+#     Output("current-spans", "data"),
+#     Output("current-text", "data"),
+#     Output("sector_pred", "children"),
+#     Output("classification_plot", "figure"),
+#     Output("overlap-warning-toast", "is_open"),
+#     Input("upload-model", "contents"),
+#     Input("upload-data", "contents"),
+#     Input("confirm-model-select", "n_clicks"),
+#     Input({'type': 'highlighted-span', 'index': dash.ALL}, 'n_clicks'),
+#     Input("selected-text-store", "data"),  # TRIGGER for adding spans
+#     State("SpanCat-specialization-radio", "value"),
+#     State("current-spans", "data"),
+#     State("current-text", "data"),
+#     prevent_initial_call=True
+# )
+# def unified_handler(
+#     classifier_contents,
+#     pdf_contents,
+#     confirm_spancat_clicks,
+#     span_clicks,
+#     selection,
+#     specialization,
+#     spans,
+#     text
+# ):
+#     fig = go.Figure()
+#     prediction_display = None
+#     triggered_id = ctx.triggered_id
+
+#     # Case 1: Remove a span
+#     if isinstance(triggered_id, dict) and triggered_id.get("type") == "highlighted-span":
+#         index_to_remove = triggered_id.get("index")
+#         new_spans = spans[:index_to_remove] + spans[index_to_remove + 1:]
+#         new_components = editable_highlight_spans(text, new_spans)
+#         return new_components, new_spans, text, dash.no_update, dash.no_update, False
+
+#     # Case 2: Add a new span
+#     if triggered_id == "selected-text-store":
+#         if not selection or selection.get("text") is None:
+#             raise PreventUpdate
+
+#         selected_text = selection["text"]
+#         start = text.find(selected_text)
+#         end = start + len(selected_text)
+
+#         if start == -1 or start == end or end > len(text):
+#             raise PreventUpdate
+
+#         # Check for overlap
+#         for span in spans:
+#             if not (end <= span["start"] or start >= span["end"]):
+#                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, True
+
+#         new_span = {
+#             "text": selected_text,
+#             "start": start,
+#             "end": end,
+#             "label": specialization,
+#             "score": 1.0
+#         }
+
+#         updated_spans = spans + [new_span]
+#         new_components = editable_highlight_spans(text, updated_spans)
+#         return new_components, updated_spans, text, dash.no_update, dash.no_update, False
+
+#     # Case 3: Load new text from PDF
+#     if pdf_contents:
+#         content_type, content_string = pdf_contents.split(',')
+#         decoded_pdf = base64.b64decode(content_string)
+#         text = extract_text_from_pdf(decoded_pdf)
+
+#     # Case 4: Load model and classify
+#     if pdf_contents and classifier_contents:
+#         def decode_model(contents):
+#             _, content_string = contents.split(',')
+#             return io.BytesIO(base64.b64decode(content_string))
+
+#         try:
+#             model = joblib.load(decode_model(classifier_contents))
+#         except Exception as e:
+#             print("Error loading model:", e)
+#             return text, [], text, None, fig, False
+
+#         paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
+#         df_new = pd.DataFrame({"text": paragraphs})
+#         result_string, df_class_probas = classify(df_new, model)
+
+#         class_mapping = {
+#             0: 'Bouw & Vastgoed',
+#             1: 'Handel & Industrie',
+#             2: 'Zakelijke Dienstverlening',
+#             3: 'Zorg'
+#         }
+#         colors = {
+#             'UNKNOWN — unable to determine a reliable class': '#888888',
+#             'Bouw & Vastgoed': '#009E73',
+#             'Handel & Industrie': '#0072B2',
+#             'Zakelijke Dienstverlening': '#CC79A7',
+#             'Zorg': '#D55E00'
+#         }
+
+#         proba_values = df_class_probas['pred_probabilities'].tolist()
+#         df_probs = pd.DataFrame(proba_values).rename(columns=class_mapping)
+#         paragraph_labels = [f"P{i + 1}" for i in range(len(df_probs))]
+
+#         for class_name in df_probs.columns:
+#             fig.add_trace(go.Bar(
+#                 x=paragraph_labels,
+#                 y=df_probs[class_name],
+#                 name=class_name,
+#                 marker_color=colors.get(class_name, '#888'),
+#                 hovertemplate=f"%{{x}}<br>{class_name}: %{{y:.2%}}<extra></extra>"
+#             ))
+
+#         fig.update_layout(
+#             title="Sector Probabilities Per Paragraph",
+#             barmode='stack',
+#             xaxis_title='Paragraph',
+#             yaxis_title='Probability',
+#             yaxis=dict(range=[0, 1], tickformat=".0%"),
+#             legend_title='Class',
+#             template='plotly_dark'
+#         )
+
+#         color = colors.get(result_string, '#ffffff')
+#         prediction_display = html.Div([
+#             html.Span("Prediction: ", style={"fontWeight": "bold", "fontSize": "18px"}),
+#             html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})
+#         ])
+
+#     # Case 5: Predict spans via SpanCat model
+#     spans = []
+#     highlighted = None
+#     if pdf_contents and confirm_spancat_clicks:
+#         spans = predict_spans(specialization, text)
+#         highlighted = editable_highlight_spans(text, spans)
+
+#     if text and not highlighted:
+#         highlighted = text
+
+#     return highlighted, spans, text, prediction_display, fig, False
+
 @app.callback(
     Output("highlighted-text-display", "children"),
     Output("current-spans", "data"),
@@ -304,14 +467,17 @@ def update_font_size(font_size):
     Output("sector_pred", "children"),
     Output("classification_plot", "figure"),
     Output("overlap-warning-toast", "is_open"),
+    Output("threshold-store", "data"),
     Input("upload-model", "contents"),
     Input("upload-data", "contents"),
     Input("confirm-model-select", "n_clicks"),
     Input({'type': 'highlighted-span', 'index': dash.ALL}, 'n_clicks'),
-    Input("selected-text-store", "data"),  # TRIGGER for adding spans
+    Input("selected-text-store", "data"),
+    Input("threshold-slider", "value"),
     State("SpanCat-specialization-radio", "value"),
     State("current-spans", "data"),
     State("current-text", "data"),
+    State("threshold-store", "data"),
     prevent_initial_call=True
 )
 def unified_handler(
@@ -320,9 +486,11 @@ def unified_handler(
     confirm_spancat_clicks,
     span_clicks,
     selection,
+    threshold_slider_val,
     specialization,
     spans,
-    text
+    text,
+    stored_threshold
 ):
     fig = go.Figure()
     prediction_display = None
@@ -333,7 +501,7 @@ def unified_handler(
         index_to_remove = triggered_id.get("index")
         new_spans = spans[:index_to_remove] + spans[index_to_remove + 1:]
         new_components = editable_highlight_spans(text, new_spans)
-        return new_components, new_spans, text, dash.no_update, dash.no_update, False
+        return new_components, new_spans, text, dash.no_update, dash.no_update, False, threshold_slider_val
 
     # Case 2: Add a new span
     if triggered_id == "selected-text-store":
@@ -347,10 +515,9 @@ def unified_handler(
         if start == -1 or start == end or end > len(text):
             raise PreventUpdate
 
-        # Check for overlap
         for span in spans:
             if not (end <= span["start"] or start >= span["end"]):
-                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, True
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, True, threshold_slider_val
 
         new_span = {
             "text": selected_text,
@@ -362,7 +529,7 @@ def unified_handler(
 
         updated_spans = spans + [new_span]
         new_components = editable_highlight_spans(text, updated_spans)
-        return new_components, updated_spans, text, dash.no_update, dash.no_update, False
+        return new_components, updated_spans, text, dash.no_update, dash.no_update, False, threshold_slider_val
 
     # Case 3: Load new text from PDF
     if pdf_contents:
@@ -380,7 +547,7 @@ def unified_handler(
             model = joblib.load(decode_model(classifier_contents))
         except Exception as e:
             print("Error loading model:", e)
-            return text, [], text, None, fig, False
+            return text, [], text, None, fig, False, threshold_slider_val
 
         paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
         df_new = pd.DataFrame({"text": paragraphs})
@@ -429,17 +596,17 @@ def unified_handler(
             html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})
         ])
 
-    # Case 5: Predict spans via SpanCat model
+    # Case 5: Predict spans or threshold changed
     spans = []
     highlighted = None
-    if pdf_contents and confirm_spancat_clicks:
-        spans = predict_spans(specialization, text)
+    if pdf_contents and (confirm_spancat_clicks or triggered_id == "threshold-slider"):
+        spans = predict_spans(specialization, text, threshold=threshold_slider_val)
         highlighted = editable_highlight_spans(text, spans)
 
     if text and not highlighted:
         highlighted = text
 
-    return highlighted, spans, text, prediction_display, fig, False
+    return highlighted, spans, text, prediction_display, fig, False, threshold_slider_val
 
 @app.callback(
     Output("retrain-status", "children", allow_duplicate=True),

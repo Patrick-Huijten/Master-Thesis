@@ -152,49 +152,114 @@ def train_SpanCat():
     
     return "Placeholder for training result"
 
+# def predict_spans(specialization, text, threshold=0.1):
+#     """
+#     Predicts spans in the given text using the trained SpanCat model for the specified specialization.
+    
+#     Args:
+#     - specialization (str): The specialization for which to load the model.
+#     - text (str): The text to analyze.
+#     - threshold (float): The minimum score to consider a span as valid.
+    
+#     Returns:
+#     - list: A dictionary containing the following 3 lists relating to the input text: 'spans', 'labels', and 'scores'
+#     """
+
+#     directory = f"SpanCat models\\{specialization}"
+
+#     # Check if the model directory exists
+#     if not os.path.exists(directory):
+#         raise ValueError(f"Model for specialization '{specialization}' not found in {directory}.")
+    
+#     # Set max_index to the highest number in the model directory
+#     max_index = max((int(m.group(1)) for name in os.listdir(directory) if (m := re.search(r'_model_(\d+)$', name))), default=-1)
+
+#     if max_index == -1:
+#         raise ValueError(f"No model found for specialization '{specialization}' in {directory}.")
+
+#     # Load the appropriate model based on the specialization
+#     model_path = f"SpanCat models\\{specialization}\\{specialization}_model_{max_index}"
+#     nlp = spacy.load(model_path)
+
+#     # Prepare and tokenize the document
+#     doc = nlp.make_doc(text)
+#     spancat = nlp.get_pipe("spancat")
+
+#     # Predict spans once
+#     predictions = spancat.predict([doc])
+#     pred_spans = predictions[0].data.tolist()  # span indices
+#     pred_scores = predictions[1].data.tolist()  # confidence scores
+
+#     # Filter and return spans based on the specified threshold
+#     results = []
+#     for (start_token, end_token), scores in zip(pred_spans, pred_scores):
+#         span = doc[start_token:end_token]  # this gives a Span object (token-based)
+
+#         for label, score in zip(spancat.labels, scores):
+#             if score >= threshold:
+#                 results.append({
+#                     "text": span.text,
+#                     "start": span.start_char,
+#                     "end": span.end_char,
+#                     "label": label,
+#                     "score": score
+#                 })
+
+#     # results = []
+#     # for (start, end), scores in zip(pred_spans, pred_scores):
+#     #     for label, score in zip(spancat.labels, scores):
+#     #         if score >= threshold:
+#     #             span = doc[start:end]
+#     #             results.append({
+#     #                 "text": span.text,
+#     #                 "start": start,
+#     #                 "end": end,
+#     #                 "label": label,
+#     #                 "score": score
+#     #             })
+
+#     print(results, len(results))
+#     # print('')
+#     # print(results['scores'][:10],results['labels'][:10],results['spans'][:10])
+
+#     return results
+
 def predict_spans(specialization, text, threshold=0.1):
     """
     Predicts spans in the given text using the trained SpanCat model for the specified specialization.
-    
+
     Args:
     - specialization (str): The specialization for which to load the model.
     - text (str): The text to analyze.
     - threshold (float): The minimum score to consider a span as valid.
-    
+
     Returns:
-    - list: A dictionary containing the following 3 lists relating to the input text: 'spans', 'labels', and 'scores'
+    - list: A list of span dictionaries with keys 'text', 'start', 'end', 'label', and 'score'.
     """
 
     directory = f"SpanCat models\\{specialization}"
 
-    # Check if the model directory exists
     if not os.path.exists(directory):
         raise ValueError(f"Model for specialization '{specialization}' not found in {directory}.")
-    
-    # Set max_index to the highest number in the model directory
+
     max_index = max((int(m.group(1)) for name in os.listdir(directory) if (m := re.search(r'_model_(\d+)$', name))), default=-1)
 
     if max_index == -1:
         raise ValueError(f"No model found for specialization '{specialization}' in {directory}.")
 
-    # Load the appropriate model based on the specialization
-    model_path = f"SpanCat models\\{specialization}\\{specialization}_model_{max_index}"
+    model_path = f"{directory}\\{specialization}_model_{max_index}"
     nlp = spacy.load(model_path)
 
-    # Prepare and tokenize the document
     doc = nlp.make_doc(text)
     spancat = nlp.get_pipe("spancat")
 
-    # Predict spans once
     predictions = spancat.predict([doc])
-    pred_spans = predictions[0].data.tolist()  # span indices
-    pred_scores = predictions[1].data.tolist()  # confidence scores
+    pred_spans = predictions[0].data.tolist()
+    pred_scores = predictions[1].data.tolist()
 
-    # Filter and return spans based on the specified threshold
     results = []
     for (start_token, end_token), scores in zip(pred_spans, pred_scores):
-        span = doc[start_token:end_token]  # this gives a Span object (token-based)
-
+        span = doc[start_token:end_token]
         for label, score in zip(spancat.labels, scores):
             if score >= threshold:
                 results.append({
@@ -205,64 +270,7 @@ def predict_spans(specialization, text, threshold=0.1):
                     "score": score
                 })
 
-    # results = []
-    # for (start, end), scores in zip(pred_spans, pred_scores):
-    #     for label, score in zip(spancat.labels, scores):
-    #         if score >= threshold:
-    #             span = doc[start:end]
-    #             results.append({
-    #                 "text": span.text,
-    #                 "start": start,
-    #                 "end": end,
-    #                 "label": label,
-    #                 "score": score
-    #             })
-
-    print(results, len(results))
-    # print('')
-    # print(results['scores'][:10],results['labels'][:10],results['spans'][:10])
-
     return results
-
-def highlight_spans(text, spans):
-    """
-    Highlights spans in the given text using Dash HTML components.
-
-    Args:
-    - text (str): The text to highlight spans in.
-    - spans (list): A list of dictionaries containing span information with keys 'start', 'end', 'label', and 'score'.
-
-    Returns:
-    - list: A list of Dash HTML components with highlighted spans.
-    """
-
-    components = []
-    current = 0
-
-    for span in sorted(spans, key=lambda x: x['start']):
-        # span_text = text[span['start']:span['end']]
-        # print(f"Adding span: [{span['start']}:{span['end']}] → '{span_text}'")
-        # print(f"Original span['text']: '{span['text']}'\n")
-
-        # Add text before the span
-        if current < span['start']:
-            components.append(html.Span(text[current:span['start']]))
-
-        # Highlighted span
-        components.append(
-            html.Span(
-                text[span['start']:span['end']],
-                style={'backgroundColor': "#127bf3", 'padding': '2px', 'borderRadius': '4px', 'cursor': 'pointer'},
-                title=f"Label: {span['label']}, Score: {span['score']:.2f}"
-            )
-        )
-        current = span['end']
-
-    # Add remaining text
-    if current < len(text):
-        components.append(html.Span(text[current:]))
-
-    return components
 
 def editable_highlight_spans(text, spans):
     components = []
