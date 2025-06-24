@@ -139,6 +139,16 @@ app.layout = dbc.Container([
             ], className="mb-4", align="start"),
 
             dcc.Graph(figure={}, id="classification_plot", style={"height": "400px"}),
+            dbc.Toast(
+                id="overlap-warning-toast",
+                header="Warning",
+                is_open=False,
+                dismissable=True,
+                icon="danger",
+                duration=4000,
+                children="Selected span overlaps with an existing one and cannot be added.",
+                style={"position": "fixed", "top": 10, "right": 10, "width": 350}
+            )
         ], width=7)
     ], className="mb-4"),
 
@@ -293,6 +303,7 @@ def update_font_size(font_size):
     Output("current-text", "data"),
     Output("sector_pred", "children"),
     Output("classification_plot", "figure"),
+    Output("overlap-warning-toast", "is_open"),
     Input("upload-model", "contents"),
     Input("upload-data", "contents"),
     Input("confirm-model-select", "n_clicks"),
@@ -322,9 +333,9 @@ def unified_handler(
         index_to_remove = triggered_id.get("index")
         new_spans = spans[:index_to_remove] + spans[index_to_remove + 1:]
         new_components = editable_highlight_spans(text, new_spans)
-        return new_components, new_spans, text, dash.no_update, dash.no_update
+        return new_components, new_spans, text, dash.no_update, dash.no_update, False
 
-    # Case 2: Add a new span (triggered by selected-text-store update)
+    # Case 2: Add a new span
     if triggered_id == "selected-text-store":
         if not selection or selection.get("text") is None:
             raise PreventUpdate
@@ -336,6 +347,11 @@ def unified_handler(
         if start == -1 or start == end or end > len(text):
             raise PreventUpdate
 
+        # Check for overlap
+        for span in spans:
+            if not (end <= span["start"] or start >= span["end"]):
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, True
+
         new_span = {
             "text": selected_text,
             "start": start,
@@ -346,7 +362,7 @@ def unified_handler(
 
         updated_spans = spans + [new_span]
         new_components = editable_highlight_spans(text, updated_spans)
-        return new_components, updated_spans, text, dash.no_update, dash.no_update
+        return new_components, updated_spans, text, dash.no_update, dash.no_update, False
 
     # Case 3: Load new text from PDF
     if pdf_contents:
@@ -364,7 +380,7 @@ def unified_handler(
             model = joblib.load(decode_model(classifier_contents))
         except Exception as e:
             print("Error loading model:", e)
-            return text, [], text, None, fig
+            return text, [], text, None, fig, False
 
         paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
         df_new = pd.DataFrame({"text": paragraphs})
@@ -423,7 +439,7 @@ def unified_handler(
     if text and not highlighted:
         highlighted = text
 
-    return highlighted, spans, text, prediction_display, fig
+    return highlighted, spans, text, prediction_display, fig, False
 
 @app.callback(
     Output("retrain-status", "children", allow_duplicate=True),
