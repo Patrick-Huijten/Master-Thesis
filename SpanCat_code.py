@@ -52,36 +52,73 @@ def convert_doccano_to_spacy(doccano_file, spacy_output_file, model="nl_core_new
     # Save to disk in spaCy's binary format
     doc_bin.to_disk(spacy_output_file)
 
+# def SpanCat_data_prep():
+#     """
+#     Prepares the data for SpanCat training by extracting labeled texts from JSONL files and transforming them into Spacy files using nl_core_news_md.
+#     """
+
+#     directory = 'SpanCat data'
+#     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
+#     pattern = re.compile(r"^(.*?)_training_spans_(\d+)$")
+
+#     max_indices = {
+#         label: (
+#             max(
+#                 (
+#                     int(match.group(2))
+#                     for f in os.listdir(directory)
+#                     if (match := pattern.match(f)) and match.group(1) == label
+#                 ),
+#                 default=1
+#             ) # + 1 
+#         )
+#         for label in labels
+#     }
+#     print("\n Next indices for each label:\n", max_indices)
+
+#     for label, index in max_indices.items():
+#         print("label", label, "with index", index)
+#         convert_doccano_to_spacy(f"SpanCat data\\{label}\\{label}_training_spans_{index}.jsonl", 
+#                                  f"SpanCat data\\{label}\\{label}_training_spans_{index}.spacy", 
+#                                  model="nl_core_news_md")  # Medium-sized model
+#         print("spacy file created for", label, "with index", index)
+
 def SpanCat_data_prep():
     """
-    Prepares the data for SpanCat training by extracting labeled texts from JSONL files and transforming them into Spacy files using nl_core_news_md.
+    For each label, convert the most recent JSONL file to a .spacy file.
     """
-
     directory = 'SpanCat data'
     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
-    pattern = re.compile(r"^(.*?)_training_spans_(\d+)$")
+    pattern = re.compile(r"^(.*?)_training_spans_(\d+)\.jsonl$")
 
-    max_indices = {
-        label: (
-            max(
-                (
-                    int(match.group(2))
-                    for f in os.listdir(directory)
-                    if (match := pattern.match(f)) and match.group(1) == label
-                ),
-                default=1
-            ) # + 1 
+    for label in labels:
+        label_dir = os.path.join(directory, label)
+        if not os.path.exists(label_dir):
+            continue
+
+        # Find the latest JSONL training file
+        matching_files = [
+            f for f in os.listdir(label_dir)
+            if (match := pattern.match(f)) and match.group(1) == label
+        ]
+
+        if not matching_files:
+            print(f"No JSONL training file found for {label}")
+            continue
+
+        # Get max index
+        latest_file = max(
+            matching_files,
+            key=lambda f: int(pattern.match(f).group(2))
         )
-        for label in labels
-    }
-    print("\n Next indices for each label:\n", max_indices)
+        index = int(pattern.match(latest_file).group(2))
 
-    for label, index in max_indices.items():
-        print("label", label, "with index", index)
-        convert_doccano_to_spacy(f"SpanCat data\\{label}\\{label}_training_spans_{index}.jsonl", 
-                                 f"SpanCat data\\{label}\\{label}_training_spans_{index}.spacy", 
-                                 model="nl_core_news_md")  # Medium-sized model
-        print("spacy file created for", label, "with index", index)
+        print(f"Converting for label {label}, using index {index}")
+        json_path = os.path.join(label_dir, latest_file)
+        spacy_path = os.path.join(label_dir, f"{label}_training_spans_{index}.spacy")
+
+        convert_doccano_to_spacy(json_path, spacy_path, model="nl_core_news_md")
+        print(f".spacy file created for {label} with index {index}")
 
 def train_SpanCat():
     """
