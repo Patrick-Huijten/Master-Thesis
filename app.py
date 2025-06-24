@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import re
 import os
 import matplotlib.pyplot as plt
-from dash import html, dcc, Input, Output, State, Dash, ctx
+from dash import html, dcc, Input, Output, State, Dash, ctx, clientside_callback
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 
@@ -21,7 +21,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
-from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, highlight_spans
+from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, highlight_spans, editable_highlight_spans
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -30,6 +30,11 @@ def extract_text_from_pdf(pdf_bytes):
 
 # App layout
 app.layout = dbc.Container([
+
+    # Save the spans found by SpanCat for reference
+    dcc.Store(id="current-spans", data=[]),
+    dcc.Store(id="current-text", data=""),
+    dcc.Store(id="selected-text-store", data={"start": None, "end": None}),
 
     # Title
     dbc.Row([ 
@@ -71,7 +76,8 @@ app.layout = dbc.Container([
                             step=1, 
                             value=20,  # Default value
                             marks={i: f"{i}" for i in range(8, 37, 4)},  # Mark every 4 units
-                        ) 
+                        ),
+                        dbc.Button("Add Selected Span", id="add-span-btn", color="success", className="mt-2")
                     ], style={"marginTop": "20px"})
                 ]) 
             ]) 
@@ -189,6 +195,28 @@ app.layout = dbc.Container([
 #____________________________________________________________________________________________________
 # Callbacks
 
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return window.dash_clientside.no_update;
+
+        const range = sel.getRangeAt(0);
+        const container = document.getElementById('highlighted-text-display');
+        if (!container || !container.contains(range.commonAncestorContainer)) return window.dash_clientside.no_update;
+
+        const selected = range.toString();
+
+        return {
+            text: selected
+        };
+    }
+    """,
+    Output("selected-text-store", "data"),
+    Input("add-span-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+
 # Callback: Toggle SpanCat modal open/close
 @app.callback(
     Output("Spancat-select-modal", "is_open"),
@@ -259,96 +287,113 @@ def update_font_size(font_size):
         'fontSize': f'{font_size}px'
     }
 
-#Load the classification model, perform classification and plot the results
 @app.callback(
-    # Output('pdf-text-output', 'value'),
-    Output('highlighted-text-display', 'children'),
+    Output("highlighted-text-display", "children"),
+    Output("current-spans", "data"),
+    Output("current-text", "data"),
     Output("sector_pred", "children"),
     Output("classification_plot", "figure"),
     Input("upload-model", "contents"),
     Input("upload-data", "contents"),
     Input("confirm-model-select", "n_clicks"),
+    Input({'type': 'highlighted-span', 'index': dash.ALL}, 'n_clicks'),
+    Input("selected-text-store", "data"),  # TRIGGER for adding spans
     State("SpanCat-specialization-radio", "value"),
+    State("current-spans", "data"),
+    State("current-text", "data"),
     prevent_initial_call=True
 )
-def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_specialization): # add SpanCat_contents
-    if classifier_contents is None and pdf_contents is None:
-        raise PreventUpdate
-    
+def unified_handler(
+    classifier_contents,
+    pdf_contents,
+    confirm_spancat_clicks,
+    span_clicks,
+    selection,
+    specialization,
+    spans,
+    text
+):
     fig = go.Figure()
-    text = ""
     prediction_display = None
-    highlighted = None
+    triggered_id = ctx.triggered_id
 
+    # Case 1: Remove a span
+    if isinstance(triggered_id, dict) and triggered_id.get("type") == "highlighted-span":
+        index_to_remove = triggered_id.get("index")
+        new_spans = spans[:index_to_remove] + spans[index_to_remove + 1:]
+        new_components = editable_highlight_spans(text, new_spans)
+        return new_components, new_spans, text, dash.no_update, dash.no_update
+
+    # Case 2: Add a new span (triggered by selected-text-store update)
+    if triggered_id == "selected-text-store":
+        if not selection or selection.get("text") is None:
+            raise PreventUpdate
+
+        selected_text = selection["text"]
+        start = text.find(selected_text)
+        end = start + len(selected_text)
+
+        if start == -1 or start == end or end > len(text):
+            raise PreventUpdate
+
+        new_span = {
+            "text": selected_text,
+            "start": start,
+            "end": end,
+            "label": specialization,
+            "score": 1.0
+        }
+
+        updated_spans = spans + [new_span]
+        new_components = editable_highlight_spans(text, updated_spans)
+        return new_components, updated_spans, text, dash.no_update, dash.no_update
+
+    # Case 3: Load new text from PDF
     if pdf_contents:
         content_type, content_string = pdf_contents.split(',')
-        decoded = base64.b64decode(content_string)
-        text = extract_text_from_pdf(decoded)
+        decoded_pdf = base64.b64decode(content_string)
+        text = extract_text_from_pdf(decoded_pdf)
 
-    # If a pdf has been uploaded and a classifier has been selected, predict the class of the pdf and visualize the results
-    if classifier_contents and pdf_contents:
-
-        # Helper function to decode base64 contents
-        def decode_contents(contents):
-            content_type, content_string = contents.split(',')
-            decoded = base64.b64decode(content_string)
-            return io.BytesIO(decoded)
-
-        # Decode and load the model
-        model_file = decode_contents(classifier_contents)
+    # Case 4: Load model and classify
+    if pdf_contents and classifier_contents:
+        def decode_model(contents):
+            _, content_string = contents.split(',')
+            return io.BytesIO(base64.b64decode(content_string))
 
         try:
-            classifier = joblib.load(model_file)
+            model = joblib.load(decode_model(classifier_contents))
         except Exception as e:
-            print("Something went wrong while loading the model")
-            return text, None, fig
+            print("Error loading model:", e)
+            return text, [], text, None, fig
 
-        # Extract text from the uploaded PDF
-        content_type, content_string = pdf_contents.split(',')
-        decoded = base64.b64decode(content_string)
-        text = extract_text_from_pdf(decoded)
-
-        # Split text into paragraphs
-        paragraphs = [para.strip() for para in re.split(r'\n\s*\n', text) if para.strip()]
+        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
         df_new = pd.DataFrame({"text": paragraphs})
+        result_string, df_class_probas = classify(df_new, model)
 
-        # Pass the temp model path to your classify function
-        result_string, df_class_probas = classify(df_new, classifier)
-
-        #Generate a stacked bar chart of the classification probabilities
         class_mapping = {
             0: 'Bouw & Vastgoed',
             1: 'Handel & Industrie',
             2: 'Zakelijke Dienstverlening',
-            3: 'Zorg'}
-        
+            3: 'Zorg'
+        }
         colors = {
-            'UNKNOWN — unable to determine a reliable class': '#888888',  # Grey
-            'Bouw & Vastgoed': '#009E73',                                 # Green
-            'Handel & Industrie': '#0072B2',                              # Blue
-            'Zakelijke Dienstverlening': '#CC79A7',                       # Pink
-            'Zorg': '#D55E00'                                             # Orange
-    }
-        
-        # Convert list of probabilities into separate columns
+            'UNKNOWN — unable to determine a reliable class': '#888888',
+            'Bouw & Vastgoed': '#009E73',
+            'Handel & Industrie': '#0072B2',
+            'Zakelijke Dienstverlening': '#CC79A7',
+            'Zorg': '#D55E00'
+        }
+
         proba_values = df_class_probas['pred_probabilities'].tolist()
+        df_probs = pd.DataFrame(proba_values).rename(columns=class_mapping)
+        paragraph_labels = [f"P{i + 1}" for i in range(len(df_probs))]
 
-        # Ensure all probability vectors are of length 4
-        assert all(len(p) == 4 for p in proba_values), "Each probability list must have 4 elements"
-
-        # Create a DataFrame from the probability lists
-        df = pd.DataFrame(proba_values).rename(columns=class_mapping)
-
-        # Create paragraph labels for the x-axis
-        paragraph_labels = [f"P{i+1}" for i in range(len(df))]
-
-        # Build the stacked bar chart
-        for class_name in df.columns:
+        for class_name in df_probs.columns:
             fig.add_trace(go.Bar(
                 x=paragraph_labels,
-                y=df[class_name],
+                y=df_probs[class_name],
                 name=class_name,
-                marker_color=colors.get(class_name, '#888'),  # fallback color
+                marker_color=colors.get(class_name, '#888'),
                 hovertemplate=f"%{{x}}<br>{class_name}: %{{y:.2%}}<extra></extra>"
             ))
 
@@ -357,32 +402,28 @@ def handle_uploads(classifier_contents, pdf_contents, confirm_SpanCat, SpanCat_s
             barmode='stack',
             xaxis_title='Paragraph',
             yaxis_title='Probability',
-            yaxis=dict(
-                range=[0, 1],
-                tickformat=".0%"),  # This formats 0.2 as 20%
+            yaxis=dict(range=[0, 1], tickformat=".0%"),
             legend_title='Class',
-            template='plotly_dark'  # matches CYBORG theme
+            template='plotly_dark'
         )
 
         color = colors.get(result_string, '#ffffff')
-    #     prediction_display = dcc.Markdown(
-    #         f"**Prediction:**<br><span style='color:{color}; font-weight:bold; font-size:24px'>{result_string}</span>",
-    #         dangerously_allow_html=True
-    # )
         prediction_display = html.Div([
             html.Span("Prediction: ", style={"fontWeight": "bold", "fontSize": "18px"}),
-            html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})])
-    
-    # If a pdf has been uploaded and a SpanCat model has been selected, perform span detection and show the results
-    if pdf_contents and confirm_SpanCat:
-        spans = predict_spans(SpanCat_specialization, text)
-        highlighted = highlight_spans(text, spans)
+            html.Span(result_string, style={"color": color, "fontWeight": "bold", "fontSize": "24px"})
+        ])
 
-    # If text is available but no spans were detected, use the original text without annotations
+    # Case 5: Predict spans via SpanCat model
+    spans = []
+    highlighted = None
+    if pdf_contents and confirm_spancat_clicks:
+        spans = predict_spans(specialization, text)
+        highlighted = editable_highlight_spans(text, spans)
+
     if text and not highlighted:
         highlighted = text
 
-    return highlighted, prediction_display, fig
+    return highlighted, spans, text, prediction_display, fig
 
 @app.callback(
     Output("retrain-status", "children", allow_duplicate=True),
@@ -430,6 +471,23 @@ def save_pdf_to_class_folder(n_clicks, selected_class, pdf_contents):
 
     except Exception as e:
         return dbc.Alert(f"Error saving PDF: {e}", color="danger", dismissable=True)
+    
+# @app.callback(
+#     Output("current-spans", "data"),
+#     Output("highlighted-text-display", "children"),
+#     Input({'type': 'highlighted-span', 'index': dash.ALL}, 'n_clicks'),
+#     State("current-spans", "data"),
+#     State("current-text", "data"),
+#     prevent_initial_call=True
+# )
+# def remove_span(n_clicks_list, spans, text):
+#     triggered_index = next((i for i, n in enumerate(n_clicks_list) if n), None)
+#     if triggered_index is None:
+#         raise PreventUpdate
+
+#     updated_spans = spans[:triggered_index] + spans[triggered_index+1:]
+#     components = editable_highlight_spans(text, updated_spans)
+#     return updated_spans, components
 
 if __name__ == '__main__':
     app.run(debug=True)

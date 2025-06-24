@@ -264,6 +264,39 @@ def highlight_spans(text, spans):
 
     return components
 
+def editable_highlight_spans(text, spans):
+    components = []
+    current = 0
+
+    for i, span in enumerate(sorted(spans, key=lambda x: x['start'])):
+        # Add non-highlighted text before span
+        if current < span['start']:
+            components.append(html.Span(text[current:span['start']]))
+
+        # Add span with onclick and index
+        span_text = text[span['start']:span['end']]
+        components.append(
+            html.Span(
+                span_text,
+                id={'type': 'highlighted-span', 'index': i},
+                n_clicks=0,
+                style={
+                    'backgroundColor': "#127bf3",
+                    'padding': '2px',
+                    'borderRadius': '4px',
+                    'cursor': 'pointer',
+                    'margin': '1px'
+                },
+                title=f"Label: {span['label']}, Score: {span['score']:.2f}"
+            )
+        )
+        current = span['end']
+
+    if current < len(text):
+        components.append(html.Span(text[current:]))
+
+    return components
+
     # for span in doc.spans.get("sc", []):
     #     if hasattr(span, "score") and span.score >= 0.1:
     #         print(f"Span: {span.text}, Label: {span.label_}, Score: {span.score:.2f}")
