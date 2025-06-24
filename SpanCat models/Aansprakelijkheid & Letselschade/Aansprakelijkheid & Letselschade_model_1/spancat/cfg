@@ -1,0 +1,10 @@
+{
+  "labels":[
+    "Aansprakelijkheid & Letselschade"
+  ],
+  "spans_key":"sc",
+  "threshold":0.0,
+  "max_positive":null,
+  "negative_weight":null,
+  "allow_overlap":true
+}
