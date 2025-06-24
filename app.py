@@ -4,6 +4,7 @@ import fitz  # PyMuPDF
 import dash
 from datetime import datetime
 import joblib
+import json
 import pandas as pd
 import plotly.graph_objects as go
 import re
@@ -96,7 +97,8 @@ app.layout = dbc.Container([
                             tooltip={"always_visible": False, "placement": "bottom"},
                         ),
 
-                        dbc.Button("Add Selected Span", id="add-span-btn", color="success", className="mt-2")
+                        dbc.Button("Add Selected Span", id="add-span-btn", color="success", className="mt-2"),
+                        dbc.Button("Add Article to SpanCat Training Data", id="save-spancat-btn", color="success", className="mt-2", style={"marginLeft": "10px"})
                     ], style={"marginTop": "20px"})
                 ]) 
             ]) 
@@ -148,7 +150,7 @@ app.layout = dbc.Container([
                         style={"marginBottom": "10px"}
                     ),
                     dbc.Button(
-                        "Add to training dataset",
+                        "Add Article to Classifier Training Data",
                         id="save-pdf-sector",
                         color="success",
                         className="w-100",
@@ -654,6 +656,99 @@ def save_pdf_to_class_folder(n_clicks, selected_class, pdf_contents):
 
     except Exception as e:
         return dbc.Alert(f"Error saving PDF: {e}", color="danger", dismissable=True)
+    
+# @app.callback(
+#     Output("retrain-status", "children", allow_duplicate=True),
+#     Input("save-spancat-btn", "n_clicks"),
+#     State("SpanCat-specialization-radio", "value"),
+#     State("current-text", "data"),
+#     State("current-spans", "data"),
+#     prevent_initial_call=True
+# )
+# def save_spancat_training_data(n_clicks, specialization, text, spans):
+#     if not text or not spans or not specialization:
+#         raise PreventUpdate
+
+#     try:
+#         # Prepare target directory
+#         base_dir = "SpanCat data"
+#         class_dir = os.path.join(base_dir, specialization)
+#         os.makedirs(class_dir, exist_ok=True)
+
+#         # Determine next available index
+#         existing = [f for f in os.listdir(class_dir) if re.match(rf"{specialization}_training_spans_\d+\.jsonl", f)]
+#         indices = [int(re.search(r"_(\d+)\.jsonl", f).group(1)) for f in existing]
+#         next_index = max(indices) + 1 if indices else 1
+
+#         # Construct file path
+#         filename = f"{specialization}_training_spans_{next_index}.jsonl"
+#         filepath = os.path.join(class_dir, filename)
+
+#         # Format data as Doccano-style JSONL
+#         data_entry = {
+#             "text": text,
+#             "label": [[span["start"], span["end"], span["label"]] for span in spans]
+#         }
+
+#         with open(filepath, "w", encoding="utf-8") as f:
+#             json.dump(data_entry, f)
+#             f.write("\n")
+
+#         return dbc.Alert(f"Saved annotated data to: {filepath}", color="success", dismissable=True)
+
+#     except Exception as e:
+#         return dbc.Alert(f"Failed to save data: {e}", color="danger", dismissable=True)
+
+@app.callback(
+    Output("retrain-status", "children", allow_duplicate=True),
+    Input("save-spancat-btn", "n_clicks"),
+    State("SpanCat-specialization-radio", "value"),
+    State("current-text", "data"),
+    State("current-spans", "data"),
+    prevent_initial_call=True
+)
+def save_spancat_training_data(n_clicks, specialization, text, spans):
+    if not text or not spans or not specialization:
+        raise PreventUpdate
+
+    try:
+        # Directory setup
+        base_dir = "SpanCat data"
+        class_dir = os.path.join(base_dir, specialization)
+        os.makedirs(class_dir, exist_ok=True)
+
+        # Find the highest existing index in filenames
+        pattern = re.compile(rf"{re.escape(specialization)}_training_spans_(\d+)\.jsonl")
+        existing_files = [f for f in os.listdir(class_dir) if pattern.fullmatch(f)]
+        existing_indices = [int(pattern.fullmatch(f).group(1)) for f in existing_files]
+        next_index = max(existing_indices) + 1 if existing_indices else 1
+
+        # Load previous data (from most recent file, if exists)
+        combined_data = []
+        if existing_files:
+            latest_file = os.path.join(class_dir, f"{specialization}_training_spans_{max(existing_indices)}.jsonl")
+            with open(latest_file, "r", encoding="utf-8") as f:
+                combined_data = [json.loads(line) for line in f if line.strip()]
+
+        # Add the new example
+        new_entry = {
+            "text": text,
+            "label": [[span["start"], span["end"], span["label"]] for span in spans]
+        }
+        combined_data.append(new_entry)
+
+        # Save to a new file with next index
+        new_filename = f"{specialization}_training_spans_{next_index}.jsonl"
+        new_path = os.path.join(class_dir, new_filename)
+
+        with open(new_path, "w", encoding="utf-8") as f:
+            for entry in combined_data:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+        return dbc.Alert(f"Saved new training file: {new_filename}", color="success", dismissable=True)
+
+    except Exception as e:
+        return dbc.Alert(f"Failed to save SpanCat data: {e}", color="danger", dismissable=True)
     
 # @app.callback(
 #     Output("current-spans", "data"),
