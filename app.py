@@ -11,6 +11,7 @@ import re
 import textwrap
 import tempfile
 import os
+import webbrowser
 import matplotlib.pyplot as plt
 from dash import html, dcc, Input, Output, State, Dash, ctx, clientside_callback
 import dash_bootstrap_components as dbc
@@ -22,6 +23,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.lib.units import inch
+from threading import Timer
 
 # External stylesheet
 external_stylesheets = [dbc.themes.CYBORG]
@@ -810,4 +812,5 @@ def download_pdf():
     return send_file(tmp_file.name, as_attachment=True, download_name="annotated_text.pdf")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    Timer(1, lambda: webbrowser.open("http://127.0.0.1:8050")).start()
+    app.run(debug=False)
