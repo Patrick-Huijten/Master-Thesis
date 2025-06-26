@@ -13,7 +13,7 @@ import tempfile
 import os
 import webbrowser
 import matplotlib.pyplot as plt
-from dash import html, dcc, Input, Output, State, Dash, ctx, clientside_callback
+from dash import html, dcc, Input, Output, State, Dash, ctx, clientside_callback, no_update
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 from flask import send_file, request
@@ -54,6 +54,9 @@ app.layout = dbc.Container([
 
     # Store for the threshold value
     dcc.Store(id="threshold-store", data=0.1),
+
+    # Download component for exporting annotated PDF
+    dcc.Download(id="download-pdf"),
 
     # Title
     dbc.Row([ 
@@ -721,28 +724,101 @@ def save_spancat_training_data(n_clicks, specialization, text, spans):
     except Exception as e:
         return dbc.Alert(f"Failed to save SpanCat data: {e}", color="danger", dismissable=True)
     
+# @app.callback(
+#     Output("retrain-status", "children", allow_duplicate=True),
+#     Input("export-pdf-btn", "n_clicks"),
+#     State("current-text", "data"),
+#     State("current-spans", "data"),
+#     prevent_initial_call=True
+# )
+# def export_pdf_callback(n_clicks, text, spans):
+#     if not text or not spans:
+#         raise PreventUpdate
+
+#     # Prepare URL with text and spans passed as query string (shortened and encoded if needed)
+#     from urllib.parse import quote
+#     try:
+#         encoded_text = quote(text)
+#         encoded_spans = quote(json.dumps(spans))
+
+#         download_url = f"/download-pdf?text={encoded_text}&spans={encoded_spans}"
+#         return html.A("Click to download PDF", href=download_url, target="_blank", style={"color": "lime", "fontWeight": "bold"})
+
+#     except Exception as e:
+#         return dbc.Alert(f"Failed to generate PDF: {e}", color="danger", dismissable=True)
+
 @app.callback(
-    Output("retrain-status", "children", allow_duplicate=True),
+    Output("download-pdf", "data"),
     Input("export-pdf-btn", "n_clicks"),
     State("current-text", "data"),
     State("current-spans", "data"),
     prevent_initial_call=True
 )
-def export_pdf_callback(n_clicks, text, spans):
+def download_pdf_direct(n_clicks, text, spans):
     if not text or not spans:
-        raise PreventUpdate
+        return no_update
 
-    # Prepare URL with text and spans passed as query string (shortened and encoded if needed)
-    from urllib.parse import quote
-    try:
-        encoded_text = quote(text)
-        encoded_spans = quote(json.dumps(spans))
+    # Generate PDF in memory
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    x_margin = inch
+    y = height - inch
+    font_size = 11
+    line_height = 16
+    max_line_width = width - 2 * x_margin
+    font_name = "Helvetica"
+    c.setFont(font_name, font_size)
 
-        download_url = f"/download-pdf?text={encoded_text}&spans={encoded_spans}"
-        return html.A("Click to download PDF", href=download_url, target="_blank", style={"color": "lime", "fontWeight": "bold"})
+    # Index mapping
+    span_lookup = {i: span for span in spans for i in range(span["start"], span["end"])}
 
-    except Exception as e:
-        return dbc.Alert(f"Failed to generate PDF: {e}", color="danger", dismissable=True)
+    def draw_line_with_highlights(line_text, global_char_offset):
+        nonlocal y
+        x = x_margin
+        i = 0
+        while i < len(line_text):
+            is_highlighted = (global_char_offset + i) in span_lookup
+            j = i
+            while j < len(line_text) and ((global_char_offset + j) in span_lookup) == is_highlighted:
+                j += 1
+            chunk = line_text[i:j]
+            width_chunk = stringWidth(chunk, font_name, font_size)
+            if is_highlighted:
+                c.setFillColor(HexColor("#127bf3"))
+                c.rect(x - 1, y - 3, width_chunk + 2, line_height + 2, fill=True, stroke=False)
+                c.setFillColor(white)
+            else:
+                c.setFillColor(black)
+            c.drawString(x, y, chunk)
+            x += width_chunk
+            i = j
+        y -= line_height
+        if y < inch:
+            c.showPage()
+            c.setFont(font_name, font_size)
+            y = height - inch
+
+    char_index = 0
+    lines = text.splitlines()  # Keeps empty lines
+
+    for line in lines:
+        if not line.strip():  # Blank line (from double \n)
+            y -= line_height  # Add a vertical gap
+            char_index += 1   # Count the newline
+            continue
+
+        wrapped_lines = textwrap.wrap(line, width=100)
+        for wrapped in wrapped_lines:
+            draw_line_with_highlights(wrapped, char_index)
+            char_index += len(wrapped)
+        char_index += 1  # For the newline
+        y -= 4  # spacing after each logical line
+
+    c.save()
+    buffer.seek(0)
+
+    return dcc.send_bytes(buffer.read(), filename="annotated_text.pdf")
 
 @app.server.route("/download-pdf")
 def download_pdf():
