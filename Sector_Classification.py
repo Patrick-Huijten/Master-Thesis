@@ -16,7 +16,17 @@ from spacy.cli import download
 from transformers import AutoTokenizer, AutoModel, RobertaForSequenceClassification, RobertaTokenizer
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 
-def extract_text_from_pdf(pdf_path):
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """
+    Extracts all text from a PDF file using PyMuPDF.
+
+    Args:
+        pdf_path (str): Path to the PDF file.
+
+    Returns:
+        str: A single string containing the concatenated text from all pages in the PDF.
+    """
+
     document = fitz.open(pdf_path)
     text = ""
     for page_num in range(len(document)):
@@ -24,31 +34,71 @@ def extract_text_from_pdf(pdf_path):
         text += page.get_text()
     return text
 
-def case_normalization(text):
-    """Returns string of input containing only lowercase letters apart from [NEWLINE], which replaces \n"""
+def case_normalization(text: str) -> str:
+    """
+    Normalizes text by converting it to lowercase and replacing newlines with a placeholder.
+
+    Args:
+        text (str): Input text.
+
+    Returns:
+        str: Normalized text with lowercase characters and '[NEWLINE]' placeholders.
+    """
+
     text = text.lower()
     text = text.replace('\n', ' [NEWLINE] ')
     while text != text.replace('  ', ' '):
         text = text.replace('  ', ' ')
     return text
 
-def remove_punctuation(text):
-    """Returns the input text with all punctuation removed"""
+def remove_punctuation(text: str) -> str:
+    """
+    Removes all punctuation from the input text while preserving '[NEWLINE]' tokens.
+
+    Args:
+        text (str): Input text.
+
+    Returns:
+        str: Text without punctuation.
+    """
     
     text = text.translate(text.maketrans("", "", string.punctuation))
     text = text.replace("NEWLINE", "[NEWLINE]")
     return text
 
-def remove_stopwords(text, nlp):
-    """Returns string of input text with stopwords removed"""
+def remove_stopwords(text: str, nlp: spacy.lang) -> str:
+    """
+    Removes stopwords from the input text using a spaCy language model.
+
+    Args:
+        text (str): Input text.
+        nlp (spacy.lang): Loaded spaCy language model.
+
+    Returns:
+        str: Text with stopwords removed.
+    """
     
     doc = nlp(text)
     filtered_words = [token.text for token in doc if not token.is_stop]
     text = " ".join(filtered_words)
     return text
 
-def lemmatization(df, nlp, text_column="text", output_column="text"):
-    """Lemmatizes the text in a specified column of a DataFrame and adds the results to a new column."""
+def lemmatization(df: pd.DataFrame, nlp: spacy.lang, text_column: str = "text", output_column: str = "text") -> pd.DataFrame:
+    """
+    Lemmatizes the text in a DataFrame column and stores the result in another column.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame containing text data.
+        nlp (spacy.lang): Loaded spaCy language model.
+        text_column (str, optional): Column name of input text. Defaults to 'text'.
+        output_column (str, optional): Column name to store lemmatized text. Defaults to 'text'.
+
+    Returns:
+        pd.DataFrame: DataFrame with an added or updated column of lemmatized text.
+
+    Raises:
+        ValueError: If the specified input column does not exist in the DataFrame.
+    """
     
     # Ensure the input column exists in the DataFrame
     if text_column not in df.columns:
@@ -60,19 +110,40 @@ def lemmatization(df, nlp, text_column="text", output_column="text"):
     
     return df
 
-def POS_tagging(text, nlp):
-    """Returns a list of (token, POS tag) tuples for the input text"""
+def POS_tagging(text: str, nlp: spacy.lang) -> list:
+    """
+    Performs part-of-speech tagging on the input text using spaCy.
+
+    Args:
+        text (str): Input text.
+        nlp (spacy.lang): Loaded spaCy language model.
+
+    Returns:
+        List of (token, POS tag) tuples.
+    """
 
     doc = nlp(text)
     pos_tags = [(token.text, token.pos_) for token in doc]
     return pos_tags
 
-def preprocess_training_data():
+def preprocess_training_data() -> pd.DataFrame:
+    """
+    Loads and preprocesses training data from PDF files into a DataFrame.
 
-    # Contruct a pandas DataFrame containing the training data
+    The function reads PDF files from structured folders, extracts and splits text into paragraphs,
+    and applies preprocessing steps including normalization, punctuation removal, stopword removal,
+    lemmatization, and POS tagging.
+
+    Returns:
+        pd.DataFrame: Preprocessed DataFrame where each row represents a paragraph, 
+        with columns for article/paragraph metadata and processed text.
+    """
+
     directory = 'Classifier data'
     df = pd.DataFrame(columns=['article_id' , 'paragraph_id', 'text', 'group', 'publication_date'])
     article_nr = 1
+
+    # Loop through all folders and articles in the directory and add them to the DataFrame
     for folder in os.listdir(directory):
         for article in os.listdir(directory + '\\' + folder):
             file_path = os.path.join(directory, folder, article)
@@ -107,42 +178,53 @@ def preprocess_training_data():
 
     return df
 
-def get_word_embedding(text):
-    model_name = "pdelobelle/robbert-v2-dutch-base" #We use RobBERT
+def get_word_embedding(text: str) -> np.ndarray:
+    """
+    Converts input text into a dense vector representation using the RobBERT transformer model.
+
+    Args:
+        text (str): Input text.
+
+    Returns:
+        np.ndarray: A 1D NumPy array representing the averaged word embeddings of the input.
+    """
+
+    model_name = "pdelobelle/robbert-v2-dutch-base"
     model = AutoModel.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model.eval()
+
+    # Tokenize the input text
     with torch.no_grad():
         tokens = tokenizer(text, padding="max_length", truncation=True, max_length=256, return_tensors="pt")
         output = model(**tokens)
         embeddings = output.last_hidden_state.mean(dim=1)
     return embeddings.squeeze().numpy()
 
-def train_classifier(df):
+def train_classifier(df: pd.DataFrame) -> str:
+    """
+    Trains an SVM classifier on the preprocessed data using RobBERT embeddings and saves the model.
 
-    #Thre is no need to display warnings, so we disable them
+    Args:
+        df (pd.DataFrame): Preprocessed DataFrame with labeled text.
+
+    Returns:
+        str: Message shown to user, including pile path to the saved classifier model.
+    """
+
+    #There is no need to display warnings, so we disable them
     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
     
-    #We select the 3 parameter values which yielded the best performance. For more information, view the classification jupyter notebook
-    # model_name = "pdelobelle/robbert-v2-dutch-base" #We use RobBERT
+    #We select the parameter values which yielded the best performance. For more information, view the classification jupyter notebook
     C = 10
     kernel = "rbf"
 
+    # Ensure the DataFrame has the necessary columns
     df["label"] = df["group"].astype("category").cat.codes 
-    # tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # model = AutoModel.from_pretrained(model_name)
-    # model.eval()
-
-    # def get_word_embedding(text):
-    #     with torch.no_grad():
-    #         tokens = tokenizer(text, padding="max_length", truncation=True, max_length=256, return_tensors="pt")
-    #         output = model(**tokens)
-    #         embeddings = output.last_hidden_state.mean(dim=1)
-    #     return embeddings.squeeze().numpy()
-
     X_train = np.array([get_word_embedding(text) for text in df["text"]])
     y_train = df["label"].values
 
+    # Train the SVM classifier
     classifier = SVC(kernel=kernel, C=C, probability=True)
     classifier.fit(X_train, y_train)
     
@@ -168,7 +250,17 @@ def train_classifier(df):
     
     return f"Classifier has been trained and saved to: {full_path}\n"
 
-def summing_probabilities(df):
+def summing_probabilities(df: pd.DataFrame) -> pd.Series:
+    """
+    Aggregates predicted class probabilities by summing them across all paragraphs of each article.
+
+    Args:
+        df (pd.DataFrame): DataFrame with paragraph-level predicted probabilities and article IDs.
+
+    Returns:
+        pd.Series: Series with article-level predictions based on summed normalized probabilities.
+    """
+
     # For each article, sum the probabilities for each class across all paragraphs
     article_preds_prob = df.groupby('article_id')['pred_probabilities'].apply(lambda x: np.sum(np.array(x), axis=0))
     
@@ -176,7 +268,17 @@ def summing_probabilities(df):
     article_preds = article_preds_prob.apply(lambda x: np.argmax(x / np.sum(x)))
     return article_preds
 
-def majority_voting(df):
+def majority_voting(df: pd.DataFrame) -> pd.Series:
+    """
+    Predicts article-level class labels by applying majority voting on paragraph-level predictions.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing paragraph-level predicted probabilities.
+
+    Returns:
+        pd.Series: Series with article-level majority-voted class predictions.
+    """
+
     # For each paragraph, select the class with the highest probability
     df['pred_class'] = df['pred_probabilities'].apply(lambda x: np.argmax(x))
     
@@ -184,7 +286,7 @@ def majority_voting(df):
     article_preds_majority = df.groupby('article_id')['pred_class'].apply(lambda x: Counter(x).most_common(1)[0][0])
     return article_preds_majority
 
-def combined_method(df, X, Y):
+def combined_method(df: pd.DataFrame, X: float, Y: float) -> dict:
     """This function combines majority voting and summed probability normalization to predict the most likely class 
     for each article based on its paragraphs. The method works as follows:
 
@@ -255,7 +357,7 @@ def combined_method(df, X, Y):
 
     return article_preds_final
 
-def classify(df, classifier):
+def classify(df: pd.DataFrame, classifier: SVC) -> pd.DataFrame:
     """
     Classifies the text in the DataFrame using a pre-trained model and returns the predictions.
     
@@ -267,10 +369,10 @@ def classify(df, classifier):
         pd.DataFrame: DataFrame with predictions.
     """
 
-    #Thre is no need to display warnings, so we disable them
+    #There is no need to display warnings, so we disable them
     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
-    # Perpare for pre-processing
+    # Prepare for pre-processing
     model_name = "nl_core_news_sm"
     if not is_package(model_name):
         download(model_name)
@@ -286,16 +388,12 @@ def classify(df, classifier):
     df = lemmatization(df, nlp)
     df['pos_tags'] = df['text'].apply(lambda text: POS_tagging(text, nlp))
 
-    # model_name = "pdelobelle/robbert-v2-dutch-base" #We use RobBERT
-    # tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # model = AutoModel.from_pretrained(model_name)
-    # model.eval()
-
+    # Ensure the DataFrame has the necessary columns
     X = np.array([get_word_embedding(text) for text in df["text"]])
     y_pred_proba = classifier.predict_proba(X)
     df['pred_probabilities'] = list(y_pred_proba)
 
-    # Get the final predictions using the combined method
+    # Get the final predictions using the combined method and constant values for X and Y
     X = 0.1
     Y = 0.3
     final_classification_dict = combined_method(df, X, Y)
