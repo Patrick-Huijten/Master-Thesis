@@ -189,6 +189,98 @@ def train_SpanCat():
     
     return "Placeholder for training result"
 
+def train_SpanCat_incl_feature_vector():
+    """
+    Trains and saves the SpanCat model using the prepared data.
+    Returns a string indicating whether the training was successful.
+    """
+
+    directory = 'SpanCat data'
+    labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
+    thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
+    ngram_size = (2, 21)
+    # epochs = {"Vastgoed": 65, "Ondernemingen": 55, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 70}
+    epochs = {"Vastgoed": 50, "Ondernemingen": 50, "Arbeid": 50, "Aansprakelijkheid & Letselschade": 50}
+
+    for label in labels:
+        #Find the most recent data for the currently selected label
+        path = f"SpanCat data\\{label}"
+        pattern = re.compile(rf"{re.escape(label)}_training_spans_(\d+)")
+        files = os.listdir(path)
+        matches = [(int(m.group(1)), f) for f in files if (m := pattern.fullmatch(os.path.splitext(f)[0]))]
+        most_recent_file = max(matches, default=(None, None))[1]
+        print("Most recent file for label", label, "is", most_recent_file)
+
+        # Load the training data
+        lang_model = spacy.load("nl_core_news_md")  # Load the large Dutch language model
+        doc_bin = DocBin().from_disk(f"{directory}\\{label}\\{most_recent_file}")
+        docs = list(doc_bin.get_docs(lang_model.vocab))
+        train_data = [Example(d, d) for d in docs]
+        random.shuffle(train_data)
+        print(f"label {label} training data loaded")
+        print(train_data)
+
+        # Create an empty SpanCat model and incrementally train it
+        nlp = spacy.load("nl_core_news_md", exclude=["ner"])
+
+        tok2vec_config = {
+            "@architectures": "spacy.Tok2Vec.v2",
+            "embed": {
+                "@architectures": "spacy.MultiHashEmbed.v2",
+                "width": 96,
+                "attrs": ["ORTH", "LOWER", "PREFIX", "SUFFIX", "SHAPE"],
+                "rows": [5000, 2500, 1000, 1000, 500]
+            },
+            "encode": {
+                "@architectures": "spacy.MaxoutWindowEncoder.v2",
+                "width": 96,
+                "depth": 2,
+                "window_size": 1,
+                "maxout_pieces": 3
+            }
+        }
+
+        spancat = nlp.add_pipe("spancat", config={
+            "spans_key": "sc",
+            "model": {
+                "@architectures": "spacy.SpanCategorizer.v1",
+                "tok2vec": tok2vec_config
+            },
+            "suggester": {
+                "@misc": "spacy.ngram_suggester.v1",
+                "sizes": [i for i in range(ngram_size[0], ngram_size[1])]
+            },
+            "threshold": 0.0
+        }, last=True)
+
+        spancat.add_label(label)
+        optimizer = nlp.initialize()
+
+        for current_epoch in range(epochs[label]):
+            print(f"starting epoch {current_epoch+1}/{epochs[label]} for label {label}")
+            local_random = random.Random(883821973 + current_epoch)
+            local_random.shuffle(train_data)
+            
+            # Use minibatch training for efficiency
+            losses = {}
+            batches = minibatch(train_data, size=8)
+            for batch in batches:
+                nlp.update(batch, sgd=optimizer, losses=losses)
+
+            if ((current_epoch + 1) % 5 == 0) or (current_epoch == epochs[label] - 1):
+                print(f"Completed epoch {current_epoch+1}/{epochs[label]}")
+        
+        # Save model after training is complete
+        match = re.search(r"_training_spans_(\d+)\.spacy", most_recent_file)
+        index = match.group(1)  # Extracted number
+        output_dir = f"SpanCat models\\{label}\\{label}_model_{index}"
+        # output_dir = f"SpanCat models\\{label}\\{label}_model_{re.search(r'_training_spans_(\d+)\.spacy', most_recent_file).group(1)}"
+        os.makedirs(output_dir, exist_ok=True)
+        nlp.to_disk(output_dir)
+        print(f"Model for label '{label}' saved to {output_dir}")
+    
+    return "Placeholder for training result"
+
 # def predict_spans(specialization, text, threshold=0.1):
 #     """
 #     Predicts spans in the given text using the trained SpanCat model for the specified specialization.

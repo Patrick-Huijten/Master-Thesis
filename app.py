@@ -22,7 +22,7 @@ app.server.max_content_length = 1024 * 1024 * 1000  # 1GB limit
 
 # Import training logic
 from Sector_Classification import train_classifier, preprocess_training_data, classify
-from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, editable_highlight_spans
+from SpanCat_code import SpanCat_data_prep, train_SpanCat, predict_spans, editable_highlight_spans, train_SpanCat_incl_feature_vector
 
 # PDF text extraction
 def extract_text_from_pdf(pdf_bytes):
@@ -295,7 +295,8 @@ def retrain_model(n_clicks):
 
         # Prepare data for SpanCat and train the model
         SpanCat_data_prep()
-        status += train_SpanCat()
+        # status += train_SpanCat()
+        status += train_SpanCat_incl_feature_vector() # Uncomment and comment the previous line if you want to include feature vectors (experimental)
 
         print(f"Status={status}")
 
