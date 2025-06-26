@@ -8,11 +8,20 @@ import json
 import pandas as pd
 import plotly.graph_objects as go
 import re
+import textwrap
+import tempfile
 import os
 import matplotlib.pyplot as plt
 from dash import html, dcc, Input, Output, State, Dash, ctx, clientside_callback
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
+from flask import send_file, request
+from reportlab.lib.colors import black, white, HexColor
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.lib.units import inch
 
 # External stylesheet
 external_stylesheets = [dbc.themes.CYBORG]
@@ -98,7 +107,8 @@ app.layout = dbc.Container([
                         ),
 
                         dbc.Button("Add Selected Span", id="add-span-btn", color="success", className="mt-2"),
-                        dbc.Button("Add Article to SpanCat Training Data", id="save-spancat-btn", color="success", className="mt-2", style={"marginLeft": "10px"})
+                        dbc.Button("Add Article to SpanCat Training Data", id="save-spancat-btn", color="success", className="mt-2", style={"marginLeft": "10px"}),
+                        dbc.Button("Export Annotated PDF", id="export-pdf-btn", color="primary", className="mt-2", style={"marginLeft": "10px"})
                     ], style={"marginTop": "20px"})
                 ]) 
             ]) 
@@ -657,48 +667,6 @@ def save_pdf_to_class_folder(n_clicks, selected_class, pdf_contents):
 
     except Exception as e:
         return dbc.Alert(f"Error saving PDF: {e}", color="danger", dismissable=True)
-    
-# @app.callback(
-#     Output("retrain-status", "children", allow_duplicate=True),
-#     Input("save-spancat-btn", "n_clicks"),
-#     State("SpanCat-specialization-radio", "value"),
-#     State("current-text", "data"),
-#     State("current-spans", "data"),
-#     prevent_initial_call=True
-# )
-# def save_spancat_training_data(n_clicks, specialization, text, spans):
-#     if not text or not spans or not specialization:
-#         raise PreventUpdate
-
-#     try:
-#         # Prepare target directory
-#         base_dir = "SpanCat data"
-#         class_dir = os.path.join(base_dir, specialization)
-#         os.makedirs(class_dir, exist_ok=True)
-
-#         # Determine next available index
-#         existing = [f for f in os.listdir(class_dir) if re.match(rf"{specialization}_training_spans_\d+\.jsonl", f)]
-#         indices = [int(re.search(r"_(\d+)\.jsonl", f).group(1)) for f in existing]
-#         next_index = max(indices) + 1 if indices else 1
-
-#         # Construct file path
-#         filename = f"{specialization}_training_spans_{next_index}.jsonl"
-#         filepath = os.path.join(class_dir, filename)
-
-#         # Format data as Doccano-style JSONL
-#         data_entry = {
-#             "text": text,
-#             "label": [[span["start"], span["end"], span["label"]] for span in spans]
-#         }
-
-#         with open(filepath, "w", encoding="utf-8") as f:
-#             json.dump(data_entry, f)
-#             f.write("\n")
-
-#         return dbc.Alert(f"Saved annotated data to: {filepath}", color="success", dismissable=True)
-
-#     except Exception as e:
-#         return dbc.Alert(f"Failed to save data: {e}", color="danger", dismissable=True)
 
 @app.callback(
     Output("retrain-status", "children", allow_duplicate=True),
@@ -751,22 +719,95 @@ def save_spancat_training_data(n_clicks, specialization, text, spans):
     except Exception as e:
         return dbc.Alert(f"Failed to save SpanCat data: {e}", color="danger", dismissable=True)
     
-# @app.callback(
-#     Output("current-spans", "data"),
-#     Output("highlighted-text-display", "children"),
-#     Input({'type': 'highlighted-span', 'index': dash.ALL}, 'n_clicks'),
-#     State("current-spans", "data"),
-#     State("current-text", "data"),
-#     prevent_initial_call=True
-# )
-# def remove_span(n_clicks_list, spans, text):
-#     triggered_index = next((i for i, n in enumerate(n_clicks_list) if n), None)
-#     if triggered_index is None:
-#         raise PreventUpdate
+@app.callback(
+    Output("retrain-status", "children", allow_duplicate=True),
+    Input("export-pdf-btn", "n_clicks"),
+    State("current-text", "data"),
+    State("current-spans", "data"),
+    prevent_initial_call=True
+)
+def export_pdf_callback(n_clicks, text, spans):
+    if not text or not spans:
+        raise PreventUpdate
 
-#     updated_spans = spans[:triggered_index] + spans[triggered_index+1:]
-#     components = editable_highlight_spans(text, updated_spans)
-#     return updated_spans, components
+    # Prepare URL with text and spans passed as query string (shortened and encoded if needed)
+    from urllib.parse import quote
+    try:
+        encoded_text = quote(text)
+        encoded_spans = quote(json.dumps(spans))
+
+        download_url = f"/download-pdf?text={encoded_text}&spans={encoded_spans}"
+        return html.A("Click to download PDF", href=download_url, target="_blank", style={"color": "lime", "fontWeight": "bold"})
+
+    except Exception as e:
+        return dbc.Alert(f"Failed to generate PDF: {e}", color="danger", dismissable=True)
+
+@app.server.route("/download-pdf")
+def download_pdf():
+
+    # Inputs
+    text = request.args.get("text", "")
+    spans = json.loads(request.args.get("spans", "[]"))
+
+    # Set up PDF
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    c = canvas.Canvas(tmp_file.name, pagesize=A4)
+    width, height = A4
+    x_margin = inch
+    y = height - inch
+    font_size = 11
+    line_height = 16
+    max_line_width = width - 2 * x_margin
+    font_name = "Helvetica"
+    c.setFont(font_name, font_size)
+
+    # Mark spans by index
+    span_lookup = {i: span for span in spans for i in range(span["start"], span["end"])}
+
+    def draw_line_with_highlights(line_text, global_char_offset):
+        nonlocal y
+
+        x = x_margin
+        i = 0
+        while i < len(line_text):
+            # Find contiguous block with same highlight status
+            current_is_highlight = (global_char_offset + i) in span_lookup
+            j = i
+            while j < len(line_text) and ((global_char_offset + j) in span_lookup) == current_is_highlight:
+                j += 1
+
+            substring = line_text[i:j]
+            text_width = stringWidth(substring, font_name, font_size)
+
+            if current_is_highlight:
+                c.setFillColor(HexColor("#127bf3"))
+                c.rect(x - 1, y - 3, text_width + 2, line_height + 2, fill=True, stroke=False)
+                c.setFillColor(white)
+            else:
+                c.setFillColor(black)
+
+            c.drawString(x, y, substring)
+            x += text_width
+            i = j
+
+        y -= line_height
+        if y < inch:
+            c.showPage()
+            c.setFont(font_name, font_size)
+            y = height - inch
+
+    # Process each paragraph
+    global_char_index = 0
+    for paragraph in text.split("\n"):
+        wrapped_lines = textwrap.wrap(paragraph, width=100)  # safe width for A4
+        for line in wrapped_lines:
+            draw_line_with_highlights(line, global_char_index)
+            global_char_index += len(line)
+        global_char_index += 1  # for newline
+        y -= 4  # paragraph spacing
+
+    c.save()
+    return send_file(tmp_file.name, as_attachment=True, download_name="annotated_text.pdf")
 
 if __name__ == '__main__':
     app.run(debug=True)
