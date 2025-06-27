@@ -1,3 +1,5 @@
+print("Loading, please wait...")
+
 import base64
 import io
 import fitz  # PyMuPDF
