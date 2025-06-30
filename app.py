@@ -360,6 +360,9 @@ def retrain_model(n_clicks):
         raise PreventUpdate
     try:
         # Pre-process training data and train the classifier
+        print("Starting retraining process...")
+        
+        print("Preprocessing training data...")
         df_train = preprocess_training_data()
         status = train_classifier(df_train)
 
