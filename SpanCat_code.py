@@ -219,6 +219,9 @@ def train_SpanCat_incl_feature_vector() -> str:
         str: Placeholder message indicating training completion.
     """
 
+    print('')
+    print("Training SpanCat with custom tok2vec feature extractor...")
+
     directory = 'SpanCat data'
     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
     ngram_size = (2, 21)
