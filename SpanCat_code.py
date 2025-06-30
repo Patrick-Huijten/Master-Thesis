@@ -241,7 +241,7 @@ def train_SpanCat_incl_feature_vector() -> str:
         train_data = [Example(d, d) for d in docs]
         random.shuffle(train_data)
         print(f"label {label} training data loaded")
-        print(train_data)
+        # print(train_data)
 
         # Create an empty SpanCat model and incrementally train it
         nlp = load_spacy_model("nl_core_news_md", exclude_ner=True)
@@ -293,12 +293,15 @@ def train_SpanCat_incl_feature_vector() -> str:
                 print(f"Completed epoch {current_epoch+1}/{epochs[label]}")
         
         # Save model after training is complete
-        match = re.search(r"_training_spans_(\d+)\.spacy", most_recent_file)
-        index = match.group(1)  # Extracted number
-        output_dir = f"SpanCat models\\{label}\\{label}_model_{index}"
-        os.makedirs(output_dir, exist_ok=True)
+        # Save model after training is complete
+        model_dir = f"SpanCat models\\{label}"
+        os.makedirs(model_dir, exist_ok=True)
+        existing_models = os.listdir(model_dir)
+        model_pattern = re.compile(rf"{re.escape(label)}_model_(\d+)")
+        existing_indices = [int(m.group(1)) for m in (model_pattern.fullmatch(os.path.splitext(f)[0]) for f in existing_models) if m]
+        next_index = max(existing_indices, default=0) + 1
+        output_dir = f"{model_dir}\\{label}_model_{next_index}"
         nlp.to_disk(output_dir)
-        print(f"Model for label '{label}' saved to {output_dir}")
     
     return "Training Completed Successfully"
 
