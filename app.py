@@ -117,7 +117,7 @@ app.layout = dbc.Container([
                         "SpanCat Threshold",
                         dcc.Slider(
                             id="threshold-slider",
-                            min=0.0,
+                            min=0.001,
                             max=1.0,
                             step=0.001,
                             value=0.1,  # Default threshold
