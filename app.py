@@ -26,6 +26,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.lib.units import inch
 from threading import Timer
+import warnings
 
 # External stylesheet
 external_stylesheets = [dbc.themes.CYBORG]
@@ -765,19 +766,16 @@ def download_pdf_direct(n_clicks, text, spans):
             y = height - inch
 
     char_index = 0
-    lines = text.splitlines()  # Keeps empty lines
+    lines = text.splitlines(keepends=True)  # Keeps newlines
 
     for line in lines:
-        if not line.strip():  # Blank line (from double \n)
-            y -= line_height  # Add a vertical gap
-            char_index += 1   # Count the newline
-            continue
-
-        wrapped_lines = textwrap.wrap(line, width=100)
+        line_content = line.rstrip('\r\n')
+        wrapped_lines = textwrap.wrap(line_content, width=100) or ['']
+        offset_in_line = 0
         for wrapped in wrapped_lines:
-            draw_line_with_highlights(wrapped, char_index)
-            char_index += len(wrapped)
-        char_index += 1  # For the newline
+            draw_line_with_highlights(wrapped, char_index + offset_in_line)
+            offset_in_line += len(wrapped)
+        char_index += len(line)
         y -= 4  # spacing after each logical line
 
     c.save()
@@ -862,18 +860,23 @@ def download_pdf():
             y = height - inch
 
     # For each paragraph in the text, wrap lines and draw them with highlights
-    global_char_index = 0
-    for paragraph in text.split("\n"):
-        wrapped_lines = textwrap.wrap(paragraph, width=100)  # safe width for A4
-        for line in wrapped_lines:
-            draw_line_with_highlights(line, global_char_index)
-            global_char_index += len(line)
-        global_char_index += 1  # for newline
-        y -= 4  # paragraph spacing
+    char_index = 0
+    lines = text.splitlines(keepends=True)  # Keeps newlines
+
+    for line in lines:
+        line_content = line.rstrip('\r\n')
+        wrapped_lines = textwrap.wrap(line_content, width=100) or ['']
+        offset_in_line = 0
+        for wrapped in wrapped_lines:
+            draw_line_with_highlights(wrapped, char_index + offset_in_line)
+            offset_in_line += len(wrapped)
+        char_index += len(line)
+        y -= 4  # spacing after each logical line
 
     c.save()
     return send_file(tmp_file.name, as_attachment=True, download_name="annotated_text.pdf")
 
 if __name__ == '__main__':
+    warnings.filterwarnings("ignore")
     Timer(1, lambda: webbrowser.open("http://127.0.0.1:8050")).start() # Automatically open the app in a web browser after 1 second
     app.run(debug=False)
