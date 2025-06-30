@@ -1,4 +1,4 @@
-print("Loading, please wait...")
+print("Loading, please wait...\n")
 
 import base64
 import io

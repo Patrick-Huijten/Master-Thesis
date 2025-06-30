@@ -125,13 +125,13 @@ def SpanCat_data_prep() -> None:
         )
         index = int(pattern.match(latest_file).group(2))
 
-        print(f"Converting for label {label}, using index {index}")
+        print(f"Converting {label} data")
         json_path = os.path.join(label_dir, latest_file)
         spacy_path = os.path.join(label_dir, f"{label}_training_spans_{index}.spacy")
 
         # Convert the Doccano JSONL file to spaCy format
         convert_doccano_to_spacy(json_path, spacy_path, model="nl_core_news_md")
-        print(f".spacy file created for {label} with index {index}")
+        print(f"{label} data has been successfully converted to spaCy format and saved to {spacy_path}")
 
 def train_SpanCat() -> str:
     """
@@ -291,9 +291,6 @@ def train_SpanCat_incl_feature_vector() -> str:
             batches = minibatch(train_data, size=8)
             for batch in batches:
                 nlp.update(batch, sgd=optimizer, losses=losses)
-
-            if ((current_epoch + 1) % 5 == 0) or (current_epoch == epochs[label] - 1):
-                print(f"Completed epoch {current_epoch+1}/{epochs[label]}")
         
         # Save model after training is complete
         # Save model after training is complete
