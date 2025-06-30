@@ -8,6 +8,7 @@ import torch
 import logging
 import re
 import joblib
+import sys
 import numpy as np
 from collections import Counter
 from sklearn.svm import SVC
@@ -15,6 +16,32 @@ from spacy.util import is_package
 from spacy.cli import download
 from transformers import AutoTokenizer, AutoModel, RobertaForSequenceClassification, RobertaTokenizer
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+
+def load_spacy_model(model_name="nl_core_news_md"):
+    """
+    Loads a spaCy language model, either from a bundled path or from the installed models.
+
+    Args:
+        model_name (str): Name of the spaCy model to load (default is "nl_core_news_md").
+
+    Returns:
+        spacy.lang: Loaded spaCy language model.
+    """
+
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    model_path = os.path.join(base_path, model_name)
+
+    # Check subdirectory with version tag (PyInstaller often nests it this way)
+    possible_subdirs = [d for d in os.listdir(model_path) if d.startswith(model_name)]
+    if possible_subdirs:
+        model_path = os.path.join(model_path, possible_subdirs[0])
+    
+    # Try loading the bundled model folder first
+    if os.path.exists(model_path):
+        return spacy.load(model_path)
+    
+    # Fallback to pip-installed version (e.g. dev environment)
+    return spacy.load(model_name)
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
@@ -161,10 +188,10 @@ def preprocess_training_data() -> pd.DataFrame:
     df['publication_date'] = pd.to_datetime(df['publication_date'], format='%d-%m-%Y')
 
     # Perpare for pre-processing
-    model_name = "nl_core_news_sm"
-    if not is_package(model_name):
-        download(model_name)
-    nlp = spacy.load('nl_core_news_sm')
+    # model_name = "nl_core_news_sm"
+    # if not is_package(model_name):
+    #     download(model_name)
+    nlp = load_spacy_model()
     special_cases = {"[NEWLINE]": [{"ORTH": "[NEWLINE]"}]}
     nlp.tokenizer.add_special_case("[NEWLINE]", [{"ORTH": "[NEWLINE]"}])
     df['original_text'] = df['text'].copy()
@@ -373,10 +400,10 @@ def classify(df: pd.DataFrame, classifier: SVC) -> pd.DataFrame:
     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
     # Prepare for pre-processing
-    model_name = "nl_core_news_md"
-    if not is_package(model_name):
-        download(model_name)
-    nlp = spacy.load('nl_core_news_md')
+    # model_name = "nl_core_news_md"
+    # if not is_package(model_name):
+    #     download(model_name)
+    nlp = load_spacy_model()
     special_cases = {"[NEWLINE]": [{"ORTH": "[NEWLINE]"}]}
     nlp.tokenizer.add_special_case("[NEWLINE]", [{"ORTH": "[NEWLINE]"}])
     df['original_text'] = df['text'].copy()

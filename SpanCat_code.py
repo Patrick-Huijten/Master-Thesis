@@ -2,6 +2,7 @@ import os
 import re
 import json
 import spacy
+import sys
 import random
 from dash import html
 from spacy.tokens import DocBin, Span, Doc
@@ -12,6 +13,39 @@ from spacy.training.example import Example
 from transformers import AutoTokenizer, AutoModel, TFAutoModel
 from spacy.util import minibatch
 from spacy.vocab import Vocab
+
+def load_spacy_model(model_name="nl_core_news_md", exclude_ner=True) -> spacy.lang:
+    """
+    Loads a spaCy language model, either from a bundled path or from the installed models.
+
+    Args:
+        model_name (str): Name of the spaCy model to load (default is "nl_core_news_md").
+        exclude_ner (bool): Whether to exclude the NER component from the model (default is True).
+
+    Returns:
+        spacy.lang: Loaded spaCy language model.
+    """
+
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    model_path = os.path.join(base_path, model_name)
+    
+    # Check subdirectory with version tag (PyInstaller often nests it this way)
+    possible_subdirs = [d for d in os.listdir(model_path) if d.startswith(model_name)]
+    if possible_subdirs:
+        model_path = os.path.join(model_path, possible_subdirs[0])
+
+    # Try loading the bundled model folder first
+    if os.path.exists(model_path):
+        if exclude_ner:
+            return spacy.load(model_path, exclude=["ner"])
+        else:
+            return spacy.load(model_path)
+    
+    # Fallback to pip-installed version (e.g. dev environment)
+    if exclude_ner:
+        return spacy.load(model_name, exclude=["ner"])
+    else:
+        return spacy.load(model_name)
 
 def convert_doccano_to_spacy(doccano_file: str, spacy_output_file: str, model: str = "nl_core_news_md") -> None:
     """
@@ -27,7 +61,7 @@ def convert_doccano_to_spacy(doccano_file: str, spacy_output_file: str, model: s
     """
 
     # Load the specified model with NER disabled (to prevent conflicts with Spancat)
-    nlp = spacy.load(model, exclude=["ner"])  
+    nlp = load_spacy_model(model, exclude_ner=True)
     doc_bin = DocBin()  # A container to store multiple spaCy Doc objects
 
     # Read the Doccano JSONL file line by line
@@ -112,7 +146,6 @@ def train_SpanCat() -> str:
 
     directory = 'SpanCat data'
     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
-    thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
     ngram_size = (2, 21)
     epochs = {"Vastgoed": 55, "Ondernemingen": 45, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 55}
     # epochs = {"Vastgoed": 15, "Ondernemingen": 15, "Arbeid": 15, "Aansprakelijkheid & Letselschade": 15} # replace with actual epochs once testing is done
@@ -127,7 +160,7 @@ def train_SpanCat() -> str:
         print("Most recent file for label", label, "is", most_recent_file)
 
         # Load the language model & training data
-        lang_model = spacy.load("nl_core_news_md")
+        lang_model = load_spacy_model("nl_core_news_md", exclude_ner=False)
         doc_bin = DocBin().from_disk(f"{directory}\\{label}\\{most_recent_file}")
         docs = list(doc_bin.get_docs(lang_model.vocab))
         train_data = [Example(d, d) for d in docs]
@@ -136,7 +169,7 @@ def train_SpanCat() -> str:
         print(train_data)
 
         # Create an empty SpanCat model and incrementally train it
-        nlp = spacy.load("nl_core_news_md")
+        nlp = load_spacy_model("nl_core_news_md", exclude_ner=True)
         spancat = nlp.add_pipe("spancat", config={
             "spans_key": "sc",
             "suggester": {
@@ -187,11 +220,10 @@ def train_SpanCat_incl_feature_vector() -> str:
 
     directory = 'SpanCat data'
     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
-    thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
     ngram_size = (2, 21)
     # epochs = {"Vastgoed": 65, "Ondernemingen": 55, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 70}
     epochs = {"Vastgoed": 55, "Ondernemingen": 45, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 55}
-    
+
     # For each label, find the most recent training file and train the SpanCat model
     for label in labels:
         path = f"SpanCat data\\{label}"
@@ -202,7 +234,7 @@ def train_SpanCat_incl_feature_vector() -> str:
         print("Most recent file for label", label, "is", most_recent_file)
 
         # Load the training data
-        lang_model = spacy.load("nl_core_news_md")
+        lang_model = load_spacy_model("nl_core_news_md", exclude_ner=False)
         doc_bin = DocBin().from_disk(f"{directory}\\{label}\\{most_recent_file}")
         docs = list(doc_bin.get_docs(lang_model.vocab))
         train_data = [Example(d, d) for d in docs]
@@ -211,7 +243,7 @@ def train_SpanCat_incl_feature_vector() -> str:
         print(train_data)
 
         # Create an empty SpanCat model and incrementally train it
-        nlp = spacy.load("nl_core_news_md", exclude=["ner"])
+        nlp = load_spacy_model("nl_core_news_md", exclude_ner=True)
         tok2vec_config = {
             "@architectures": "spacy.Tok2Vec.v2",
             "embed": {
