@@ -28,6 +28,7 @@ from reportlab.lib.units import inch
 from threading import Timer
 from waitress import serve
 import warnings
+import spacy
 
 # External stylesheet
 external_stylesheets = [dbc.themes.CYBORG]
