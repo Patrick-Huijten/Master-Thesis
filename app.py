@@ -26,6 +26,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.lib.units import inch
 from threading import Timer
+from waitress import serve
 import warnings
 
 # External stylesheet
@@ -877,6 +878,5 @@ def download_pdf():
     return send_file(tmp_file.name, as_attachment=True, download_name="annotated_text.pdf")
 
 if __name__ == '__main__':
-    warnings.filterwarnings("ignore")
-    Timer(1, lambda: webbrowser.open("http://127.0.0.1:8050")).start() # Automatically open the app in a web browser after 1 second
-    app.run(debug=False)
+    Timer(1, lambda: webbrowser.open("http://127.0.0.1:8050")).start()
+    serve(app.server, host='127.0.0.1', port=8050)
