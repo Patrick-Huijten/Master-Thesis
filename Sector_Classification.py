@@ -239,6 +239,8 @@ def train_classifier(df: pd.DataFrame) -> str:
         str: Message shown to user, including pile path to the saved classifier model.
     """
 
+    print("Training Classifier...")
+
     #There is no need to display warnings, so we disable them
     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
     
@@ -275,6 +277,7 @@ def train_classifier(df: pd.DataFrame) -> str:
     full_path = os.path.abspath(save_path)
     joblib.dump(classifier, save_path)
     
+    print(f"Classifier has been trained and saved to: {full_path}")
     return f"Classifier has been trained and saved to: {full_path}\n"
 
 def summing_probabilities(df: pd.DataFrame) -> pd.Series:
