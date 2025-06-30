@@ -114,7 +114,7 @@ def train_SpanCat() -> str:
     labels = ["Vastgoed", "Ondernemingen", "Arbeid", "Aansprakelijkheid & Letselschade"]
     thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
     ngram_size = (2, 21)
-    epochs = {"Vastgoed": 65, "Ondernemingen": 55, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 70}
+    epochs = {"Vastgoed": 55, "Ondernemingen": 45, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 55}
     # epochs = {"Vastgoed": 15, "Ondernemingen": 15, "Arbeid": 15, "Aansprakelijkheid & Letselschade": 15} # replace with actual epochs once testing is done
 
     # For each label, find the most recent training file and train the SpanCat model
@@ -190,8 +190,8 @@ def train_SpanCat_incl_feature_vector() -> str:
     thresholds = [0.01, 0.05, 0.1, 0.15, 0.2]
     ngram_size = (2, 21)
     # epochs = {"Vastgoed": 65, "Ondernemingen": 55, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 70}
-    epochs = {"Vastgoed": 50, "Ondernemingen": 50, "Arbeid": 50, "Aansprakelijkheid & Letselschade": 50}
-
+    epochs = {"Vastgoed": 55, "Ondernemingen": 45, "Arbeid": 60, "Aansprakelijkheid & Letselschade": 55}
+    
     # For each label, find the most recent training file and train the SpanCat model
     for label in labels:
         path = f"SpanCat data\\{label}"

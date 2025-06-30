@@ -373,10 +373,10 @@ def classify(df: pd.DataFrame, classifier: SVC) -> pd.DataFrame:
     logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
     # Prepare for pre-processing
-    model_name = "nl_core_news_sm"
+    model_name = "nl_core_news_md"
     if not is_package(model_name):
         download(model_name)
-    nlp = spacy.load('nl_core_news_sm')
+    nlp = spacy.load('nl_core_news_md')
     special_cases = {"[NEWLINE]": [{"ORTH": "[NEWLINE]"}]}
     nlp.tokenizer.add_special_case("[NEWLINE]", [{"ORTH": "[NEWLINE]"}])
     df['original_text'] = df['text'].copy()

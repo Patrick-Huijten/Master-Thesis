@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('C:\\Users\\20193204\\Documents\\0 Uni\\Master Year 2\\Thesis\\GitHub Repo\\Master-Thesis\\venv_thesis\\lib\\site-packages\\nl_core_news_md', 'nl_core_news_md')],
     hiddenimports=['spacy_alignments'],
     hookspath=[],
     hooksconfig={},
