@@ -334,26 +334,6 @@
     "attribute_ruler":[
 
     ],
-    "ner":[
-      "CARDINAL",
-      "DATE",
-      "EVENT",
-      "FAC",
-      "GPE",
-      "LANGUAGE",
-      "LAW",
-      "LOC",
-      "MONEY",
-      "NORP",
-      "ORDINAL",
-      "ORG",
-      "PERCENT",
-      "PERSON",
-      "PRODUCT",
-      "QUANTITY",
-      "TIME",
-      "WORK_OF_ART"
-    ],
     "spancat":[
       "Arbeid"
     ]
@@ -365,7 +345,6 @@
     "parser",
     "lemmatizer",
     "attribute_ruler",
-    "ner",
     "spancat"
   ],
   "components":[
@@ -376,7 +355,6 @@
     "lemmatizer",
     "senter",
     "attribute_ruler",
-    "ner",
     "spancat"
   ],
   "disabled":[
