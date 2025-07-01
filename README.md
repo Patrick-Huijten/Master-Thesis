@@ -143,8 +143,8 @@ Replace `<path-to-nl_core_news_md>` with the directory path from step 2.
 
 > ⚠️ The used PyInstaller command was designed with **Windows** in mind, On **macOS/Linux**, replace ";" with ":" and "^" with "\\"
 
-4. **The compiled executable will appear in the `dist/` directory**.
-   The newly created `dist/` folder will contain a folder called `app/`, which contains the executable.
+4. **Locate the compiled executable**:<br>
+   The newly created `dist/` folder contains a folder called `app/`, which contains the compiled executable.
 
-5. **Copy the `Classifier data/`, `Classifier models/`, `SpanCat data/` and `Spancat models/` folders into `app/`**:
+6. **Copy the `Classifier data/`, `Classifier models/`, `SpanCat data/` and `Spancat models/` folders into `app/`**:
    This allows the resulting executable to detect, read and save data and models.
