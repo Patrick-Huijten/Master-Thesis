@@ -19,6 +19,8 @@ Here's a breakdown of each folder and file in the repository:
   - `Span Detection Pre-Processing.ipynb`: Prepares the manually labeled dataset obtained from Doccano for span detection.
   - `Span Detection.ipynb`: Tuning and testing of class-specific span detection through the use of Spacy SpanCat models.
   - `data/`: Contains all data used by the notebooks in this folder. This includes the outputs of the pre-processing notebooks.
+  - `Old Classification Code/`: Contains previous versions of `Classification.ipynb`
+  - `Old Span Detection Code/`: Contains previous versions of `Span Detection.ipynb`
 
  - **`Classifier data/`**  
   Contains per-class data filled and used by `app.py` to train sector classifiers.
